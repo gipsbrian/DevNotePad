@@ -1,0 +1,57 @@
+name: Bug report
+description: Something behaves differently from how it's documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a security flaw instead? Don't file it here - see
+        [SECURITY.md](../blob/main/SECURITY.md) for how to report it privately.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as ...
+        2. Open the board ...
+        3. Hover ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The VERSION file's contents, or the commit you're running.
+    validations:
+      required: true
+  - type: dropdown
+    id: how-run
+    attributes:
+      label: How are you running it
+      options:
+        - Docker Compose
+        - make dev (local dev servers)
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: |
+        Backend logs (`docker compose logs backend`) or the browser console
+        often say it outright. Remove any tokens before pasting.
+      render: shell
+  - type: checkboxes
+    id: offer
+    attributes:
+      label: Would you like to fix it?
+      options:
+        - label: I'd like to open a pull request for this

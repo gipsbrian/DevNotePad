@@ -1,0 +1,15 @@
+.env
+data/
+*.db
+
+# Working notes: kept locally, not published.
+docs/plans/
+
+# backend
+backend/.venv/
+backend/**/__pycache__/
+backend/**/*.pyc
+
+# frontend
+frontend/node_modules/
+frontend/dist/

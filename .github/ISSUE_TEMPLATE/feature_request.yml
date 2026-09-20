@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest something the app should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The situation you're in, rather than the solution you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Two things this app deliberately doesn't do: create GitHub labels,
+        milestones or issue types, and write to GitHub without an explicit
+        action. Proposals that need either are unlikely to be accepted.

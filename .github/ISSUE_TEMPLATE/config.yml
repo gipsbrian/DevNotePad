@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/gipsbrian/DevNotePad/security/advisories/new
+    about: Report a vulnerability privately, never in a public issue.
+  - name: How to use the app
+    url: https://github.com/gipsbrian/DevNotePad/blob/main/USAGE.md
+    about: Boards, sharing, organisations, single sign-on.
