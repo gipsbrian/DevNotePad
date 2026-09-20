@@ -6,6 +6,9 @@ import os
 os.environ["DATABASE_PATH"] = ":memory:"
 os.environ["GIT_TOKEN"] = ""
 os.environ["GIT_ORG_URL"] = ""
+# The test client talks http, so a Secure session cookie from a developer's
+# .env would be dropped by the client and every signed-in test would 401.
+os.environ["SESSION_HTTPS_ONLY"] = "false"
 
 from cryptography.fernet import Fernet  # noqa: E402
 

@@ -57,8 +57,8 @@ every member. Tokens never cross between people: a board is read with its
 own token, its owner's, or (for organisation boards) the organisation's,
 and every change made on GitHub goes out with the acting person's own
 token. `GIT_TOKEN` / `GIT_ORG_URL` from `.env` are only ever lent to the
-first account. The full model is in
-[docs/plans/organisations-and-sso.md](docs/plans/organisations-and-sso.md).
+first account. [USAGE.md](USAGE.md#organisations) walks through
+organisations, sharing and who may write.
 
 Admins bring people in with single-use invitation links or by approving
 join requests from the organisation's link, `/o/<slug>`. The main

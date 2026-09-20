@@ -8,7 +8,12 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- The backend test suite no longer picks up `SESSION_HTTPS_ONLY` from a
+  developer's `.env`; a Secure session cookie was dropped by the test
+  client, so every signed-in test failed on an HTTPS deployment's machine.
+- A README link pointed at a working document that isn't published.
 
 ## [0.2.0] - 2026-09-20
 
