@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { AnimatePresence } from "framer-motion";
 import { api } from "../api/client";
 import type { Column, DashboardDetail, IssueCard, Note, RepoMetadata, Settings } from "../types/api";
 import { TokenBadge } from "../components/TokenBadge";
@@ -637,20 +638,23 @@ export function DashboardBoardPage() {
         />
       )}
 
-      {openIssues.length > 0 && (
-        <IssueStack
-          dashboardId={dashboardId}
-          issueNumbers={openIssues}
-          columns={columns}
-          issuesByColumn={issuesByColumn}
-          onCloseOne={(n) => setOpenIssues(openIssues.filter((x) => x !== n))}
-          onCloseAll={() => setOpenIssues([])}
-          onAdd={(n) => setOpenIssues([...openIssues, n])}
-          onChanged={handleIssueChanged}
-          canWrite={canWrite}
-          writeBlockReason={dashboard.write_block_reason}
-        />
-      )}
+      <AnimatePresence>
+        {openIssues.length > 0 && (
+          <IssueStack
+            key="open-issues"
+            dashboardId={dashboardId}
+            issueNumbers={openIssues}
+            columns={columns}
+            issuesByColumn={issuesByColumn}
+            onCloseOne={(n) => setOpenIssues(openIssues.filter((x) => x !== n))}
+            onCloseAll={() => setOpenIssues([])}
+            onAdd={(n) => setOpenIssues([...openIssues, n])}
+            onChanged={handleIssueChanged}
+            canWrite={canWrite}
+            writeBlockReason={dashboard.write_block_reason}
+          />
+        )}
+      </AnimatePresence>
 
       {showShare && (
         <ShareModal

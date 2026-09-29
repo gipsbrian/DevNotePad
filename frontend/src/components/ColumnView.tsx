@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { AnimatePresence } from "framer-motion";
 import type { Column, IssueCard, Note } from "../types/api";
 import { IssueCardView } from "./IssueCardView";
 import { copyText, formatIssuesForCopy } from "../utils/clipboard";
@@ -229,21 +230,23 @@ export function ColumnView({
         }}
       >
         {loading && [0, 1].map((i) => <div key={i} className="skeleton card-skeleton" />)}
-        {drawn?.map((issue) => (
-          <IssueCardView
-            key={issue.number}
-            issue={issue}
-            dashboardId={dashboardId}
-            columnId={column.id}
-            otherColumns={allColumns.filter((c) => c.id !== column.id)}
-            notesByIssue={notesByIssue}
-            onOpen={onOpenIssue}
-            onMove={onMoveIssue}
-            onCloseIssue={onCloseIssue}
-            canWrite={canWrite}
-            writeBlockReason={writeBlockReason}
-          />
-        ))}
+        <AnimatePresence initial={false}>
+          {drawn?.map((issue) => (
+            <IssueCardView
+              key={issue.number}
+              issue={issue}
+              dashboardId={dashboardId}
+              columnId={column.id}
+              otherColumns={allColumns.filter((c) => c.id !== column.id)}
+              notesByIssue={notesByIssue}
+              onOpen={onOpenIssue}
+              onMove={onMoveIssue}
+              onCloseIssue={onCloseIssue}
+              canWrite={canWrite}
+              writeBlockReason={writeBlockReason}
+            />
+          ))}
+        </AnimatePresence>
         {hasMore && (
           // Drawn on reaching it; a button too, for keyboards and for a
           // browser without IntersectionObserver.

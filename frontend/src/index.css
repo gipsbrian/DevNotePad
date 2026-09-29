@@ -1629,7 +1629,9 @@ a {
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   position: relative;
-  transition: box-shadow 0.15s ease, transform 0.12s ease;
+  /* Not transform: framer-motion drives it every frame, and a CSS
+     transition on top makes drags and springs lag behind. */
+  transition: box-shadow 0.15s ease;
 }
 
 .card:hover {
@@ -3520,6 +3522,7 @@ textarea {
    the single modal always did; two or three share the width. */
 
 .issue-stack {
+  position: relative; /* a closing pane leaves the row but stays in view */
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -3535,6 +3538,25 @@ textarea {
   position: relative;
   flex: 1;
   min-width: 0;
+}
+
+/* The backdrop dims and blurs in while the pane grows out of its card
+   (utils/cardOrigin.ts); both reverse on close. */
+.issue-overlay {
+  animation: issue-overlay-in 0.28s ease both;
+}
+
+@keyframes issue-overlay-in {
+  from {
+    background-color: rgba(12, 15, 20, 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .issue-overlay {
+    animation: none;
+  }
 }
 
 /* Each pane scrolls on its own, so a long issue can't push a short one

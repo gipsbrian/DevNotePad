@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
+import { rememberCardOrigin } from "../utils/cardOrigin";
 import type { Column, Comment, IssueCard, Note, SubIssue } from "../types/api";
 import { api } from "../api/client";
 import { NotePopover } from "./NotePopover";
@@ -123,18 +124,36 @@ export function IssueCardView({
     disabled: !draggable || !canWrite,
   });
 
-  const style = transform
-    ? {
-        transform: `translate(${transform.x}px, ${transform.y}px) rotate(2deg)`,
-        zIndex: isDragging ? 30 : undefined,
-        boxShadow: isDragging ? "var(--shadow-lg)" : undefined,
-      }
-    : undefined;
+  // As motion values rather than a transform string, so the drag offset
+  // composes with the card's own enter and exit animations instead of
+  // being overwritten by them.
+  const style = {
+    x: transform?.x ?? 0,
+    y: transform?.y ?? 0,
+    rotate: transform ? 2 : 0,
+    zIndex: isDragging ? 30 : undefined,
+    boxShadow: isDragging ? "var(--shadow-lg)" : undefined,
+  };
 
   return (
     <motion.article
       layout
-      initial={false}
+      // Cards arriving (moved in, newly matching) scale up into place;
+      // leaving ones (closed, moved out) fade while the gap closes, so the
+      // cards below slide up instead of jumping. Already-present cards
+      // don't animate on load: the column's AnimatePresence skips them.
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{
+        opacity: 0,
+        scale: 0.96,
+        height: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        marginBottom: -9, // the column's gap
+        transition: { duration: 0.26, ease: [0.2, 0.8, 0.2, 1], opacity: { duration: 0.14 } },
+      }}
+      transition={{ type: "spring", stiffness: 420, damping: 34 }}
       // Scoped to the column: the same issue legitimately appears in
       // several columns at once (e.g. "All open" and "Assigned to me"),
       // and framer-motion collapses duplicate layoutIds into one element,
@@ -154,7 +173,11 @@ export function IssueCardView({
       className="card"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => !isDragging && onOpen(issue.number)}
+      onClick={() => {
+        if (isDragging) return;
+        rememberCardOrigin(issue.number, cardRef.current);
+        onOpen(issue.number);
+      }}
     >
       {(hovered || noteTapped) && latestNote && !subOpen && (
         <NotePopover anchor={cardRef.current} text={latestNote.body} moreCount={notes.length - 1} />
