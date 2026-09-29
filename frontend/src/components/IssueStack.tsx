@@ -9,9 +9,43 @@ import { IconChevronLeft, IconPlus, IconX } from "./Icons";
  * narrow for the description to be worth reading. */
 export const MAX_OPEN_ISSUES = 3;
 
+/** Takes a closing pane out of the row, so the panes left behind take the
+ * space at once, and shrinks it back into its card. */
+function leavePane(pane: HTMLElement, issueNumber: number): Promise<unknown> {
+  const { offsetLeft, offsetTop, offsetWidth } = pane;
+  Object.assign(pane.style, {
+    position: "absolute",
+    left: `${offsetLeft}px`,
+    top: `${offsetTop}px`,
+    width: `${offsetWidth}px`,
+    pointerEvents: "none",
+  });
+  return shrinkIntoCard(pane, issueNumber);
+}
+
+/** Every pane back to its card while the backdrop clears. */
+function leaveStack(overlay: HTMLElement): Promise<unknown> {
+  overlay.style.pointerEvents = "none";
+  const panes = [...overlay.querySelectorAll<HTMLElement>(".issue-pane-wrap[data-issue]")];
+  return Promise.all([
+    ...panes.map((pane) => shrinkIntoCard(pane, Number(pane.dataset.issue))),
+    clearBackdrop(overlay, 300),
+  ]);
+}
+
 /** One open issue. Grows out of the card it was opened from, and shrinks
  * back into it when closed on its own. */
-function IssuePane({ issueNumber, children }: { issueNumber: number; children: ReactNode }) {
+function IssuePane({
+  issueNumber,
+  closing,
+  children,
+}: {
+  issueNumber: number;
+  /** Closes already under way, started at the click rather than after the
+   * board re-renders, which can take long enough to feel sluggish. */
+  closing: Map<number, Promise<unknown>>;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [isPresent, safeToRemove] = usePresence();
 
@@ -23,17 +57,11 @@ function IssuePane({ issueNumber, children }: { issueNumber: number; children: R
     if (isPresent) return;
     const pane = ref.current;
     if (!pane) return safeToRemove();
-    // Out of the row, so the panes left behind take the space at once.
-    const { offsetLeft, offsetTop, offsetWidth } = pane;
-    Object.assign(pane.style, {
-      position: "absolute",
-      left: `${offsetLeft}px`,
-      top: `${offsetTop}px`,
-      width: `${offsetWidth}px`,
-      pointerEvents: "none",
+    (closing.get(issueNumber) ?? leavePane(pane, issueNumber)).then(() => {
+      closing.delete(issueNumber);
+      safeToRemove();
     });
-    shrinkIntoCard(pane, issueNumber).then(() => safeToRemove());
-  }, [isPresent, safeToRemove, issueNumber]);
+  }, [isPresent, safeToRemove, issueNumber, closing]);
 
   return (
     <div className="issue-pane-wrap" data-issue={issueNumber} ref={ref}>
@@ -69,19 +97,35 @@ export function IssueStack({
   const [pickedColumn, setPickedColumn] = useState<Column | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [isPresent, safeToRemove] = usePresence();
+  const paneClosing = useRef(new Map<number, Promise<unknown>>()).current;
+  const stackClosing = useRef<Promise<unknown> | null>(null);
 
-  // Closing the last issue (or all of them) removes the whole stack: every
-  // pane goes back to its card while the backdrop clears.
+  // The animations start here, on the click or key, and the removal below
+  // waits for them: waiting for the re-render first would add a pause.
+  function startLeaving() {
+    if (overlayRef.current && !stackClosing.current) stackClosing.current = leaveStack(overlayRef.current);
+  }
+
+  function closeAll() {
+    startLeaving();
+    onCloseAll();
+  }
+
+  function closeOne(issueNumber: number) {
+    // The last pane takes the whole stack with it.
+    if (issueNumbers.length === 1) startLeaving();
+    else if (!paneClosing.has(issueNumber)) {
+      const pane = overlayRef.current?.querySelector<HTMLElement>(`.issue-pane-wrap[data-issue="${issueNumber}"]`);
+      if (pane) paneClosing.set(issueNumber, leavePane(pane, issueNumber));
+    }
+    onCloseOne(issueNumber);
+  }
+
   useEffect(() => {
     if (isPresent) return;
     const overlay = overlayRef.current;
     if (!overlay) return safeToRemove();
-    overlay.style.pointerEvents = "none";
-    const panes = [...overlay.querySelectorAll<HTMLElement>(".issue-pane-wrap[data-issue]")];
-    Promise.all([
-      ...panes.map((pane) => shrinkIntoCard(pane, Number(pane.dataset.issue))),
-      clearBackdrop(overlay, 300),
-    ]).then(() => safeToRemove());
+    (stackClosing.current ?? leaveStack(overlay)).then(() => safeToRemove());
   }, [isPresent, safeToRemove]);
 
   useEffect(() => {
@@ -90,11 +134,11 @@ export function IssueStack({
       // Back out of the picker first — Escape closing the whole
       // comparison because a menu was open would be a rude surprise.
       if (picking) setPicking(false);
-      else onCloseAll();
+      else closeAll();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [picking, onCloseAll]);
+  });
 
   useEffect(() => {
     if (!picking) setPickedColumn(null);
@@ -108,17 +152,17 @@ export function IssueStack({
   }
 
   return (
-    <div className="modal-overlay issue-overlay" ref={overlayRef} onClick={onCloseAll}>
+    <div className="modal-overlay issue-overlay" ref={overlayRef} onClick={closeAll}>
       <div className={`issue-stack count-${issueNumbers.length}`}>
         <AnimatePresence initial={false}>
           {issueNumbers.map((number) => (
-            <IssuePane issueNumber={number} key={number}>
+            <IssuePane issueNumber={number} key={number} closing={paneClosing}>
               {issueNumbers.length > 1 && (
                 <button
                   className="pane-close"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onCloseOne(number);
+                    closeOne(number);
                   }}
                   title={`Close #${number}`}
                   aria-label={`Close #${number}`}
@@ -129,7 +173,7 @@ export function IssueStack({
               <IssueDetailModal
                 dashboardId={dashboardId}
                 issueNumber={number}
-                onClose={() => onCloseOne(number)}
+                onClose={() => closeOne(number)}
                 onChanged={onChanged}
                 canWrite={canWrite}
                 writeBlockReason={writeBlockReason}
