@@ -3522,7 +3522,6 @@ textarea {
    the single modal always did; two or three share the width. */
 
 .issue-stack {
-  position: relative; /* a closing pane leaves the row but stays in view */
   display: flex;
   align-items: flex-start;
   justify-content: center;

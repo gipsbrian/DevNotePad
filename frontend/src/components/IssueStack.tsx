@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, usePresence } from "framer-motion";
 import type { Column, IssueCard } from "../types/api";
-import { clearBackdrop, growFromCard, shrinkIntoCard } from "../utils/cardOrigin";
+import { clearBackdrop, growFromCard, prefersReducedMotion, shrinkIntoCard } from "../utils/cardOrigin";
 import { IssueDetailModal } from "./IssueDetailModal";
 import { IconChevronLeft, IconPlus, IconX } from "./Icons";
 
@@ -9,9 +9,14 @@ import { IconChevronLeft, IconPlus, IconX } from "./Icons";
  * narrow for the description to be worth reading. */
 export const MAX_OPEN_ISSUES = 3;
 
-/** Takes a closing pane out of the row, so the panes left behind take the
- * space at once, and shrinks it back into its card. */
+/** Takes a closing pane out of the row and shrinks it back into its card.
+ * It's placed against the overlay rather than the row, so the row
+ * re-centring on the panes left behind doesn't carry it along. */
 function leavePane(pane: HTMLElement, issueNumber: number): Promise<unknown> {
+  if (prefersReducedMotion()) {
+    pane.style.display = "none";
+    return Promise.resolve();
+  }
   const { offsetLeft, offsetTop, offsetWidth } = pane;
   Object.assign(pane.style, {
     position: "absolute",
@@ -26,6 +31,10 @@ function leavePane(pane: HTMLElement, issueNumber: number): Promise<unknown> {
 /** Every pane back to its card while the backdrop clears. */
 function leaveStack(overlay: HTMLElement): Promise<unknown> {
   overlay.style.pointerEvents = "none";
+  if (prefersReducedMotion()) {
+    overlay.style.visibility = "hidden";
+    return Promise.resolve();
+  }
   const panes = [...overlay.querySelectorAll<HTMLElement>(".issue-pane-wrap[data-issue]")];
   return Promise.all([
     ...panes.map((pane) => shrinkIntoCard(pane, Number(pane.dataset.issue))),
@@ -116,7 +125,13 @@ export function IssueStack({
     if (issueNumbers.length === 1) startLeaving();
     else if (!paneClosing.has(issueNumber)) {
       const pane = overlayRef.current?.querySelector<HTMLElement>(`.issue-pane-wrap[data-issue="${issueNumber}"]`);
-      if (pane) paneClosing.set(issueNumber, leavePane(pane, issueNumber));
+      if (pane) {
+        paneClosing.set(issueNumber, leavePane(pane, issueNumber));
+        // The re-render would narrow the row to fit one pane fewer; doing
+        // it now keeps the panes left behind from resizing twice.
+        const row = overlayRef.current?.querySelector(".issue-stack");
+        row?.classList.replace(`count-${issueNumbers.length}`, `count-${issueNumbers.length - 1}`);
+      }
     }
     onCloseOne(issueNumber);
   }
