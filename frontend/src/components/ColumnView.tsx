@@ -6,6 +6,9 @@ import { IssueCardView } from "./IssueCardView";
 import { copyText, formatIssuesForCopy } from "../utils/clipboard";
 import { IconChevronLeft, IconChevronRight, IconDots, IconRefresh } from "./Icons";
 
+/** More cards than this arriving or leaving at once aren't animated. */
+const MAX_ANIMATED = 12;
+
 /** Cards drawn at a time; scrolling near the end draws the next batch. A
  * column matching a thousand issues would otherwise draw a thousand cards
  * on every re-render, freezing the page. */
@@ -134,6 +137,10 @@ export function ColumnView({
 
   const chips = tracking ? ["tracking"] : filterChips(column);
 
+  // Cards animate in and out one or a few at a time. A wholesale change
+  // (first load, a new filter, a big refresh) swaps the list instantly:
+  // animating hundreds of cards at once only stalls the page. A new key
+  // remounts the presence group, and `initial={false}` then skips entrances.
   const [limit, setLimit] = useState(BATCH);
   const drawn = issues?.slice(0, limit);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -150,6 +157,16 @@ export function ColumnView({
     observer.observe(more);
     return () => observer.disconnect();
   }, [hasMore, limit]);
+
+  const shown = useRef<number[]>([]);
+  const generation = useRef(0);
+  const numbers = drawn?.map((i) => i.number) ?? [];
+  const before = new Set(shown.current);
+  const after = new Set(numbers);
+  const arriving = numbers.filter((n) => !before.has(n)).length;
+  const leaving = shown.current.filter((n) => !after.has(n)).length;
+  if (arriving > MAX_ANIMATED || leaving > MAX_ANIMATED) generation.current += 1;
+  shown.current = numbers;
 
   return (
     <section className={`column${tracking ? " tracking" : ""}${dropState}`}>
@@ -253,7 +270,7 @@ export function ColumnView({
         }}
       >
         {loading && [0, 1].map((i) => <div key={i} className="skeleton card-skeleton" />)}
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} key={generation.current}>
           {drawn?.map((issue) => (
             <IssueCardView
               key={issue.number}

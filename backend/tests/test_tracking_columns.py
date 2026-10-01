@@ -221,3 +221,21 @@ def test_only_board_managers_can_drop_or_remove(team):
 
     _, outsider = team["outsider"]
     assert _track(outsider, board, column, 1).status_code == 404
+
+
+@respx.mock
+def test_a_filter_column_can_become_a_tracking_one_and_back(client, make_dashboard, session):
+    board = make_dashboard()
+    column = _column(client, board, "Look out", kind="filter", labels=["bug"], assignee="someone")
+    url = f"/api/dashboards/{board['id']}/columns/{column['id']}"
+
+    tracking = client.put(url, json={"kind": "tracking", "labels": ["bug"]}).json()
+    assert tracking["kind"] == "tracking"
+    assert tracking["labels"] == [] and tracking["assignee"] is None and tracking["state"] == "open"
+    respx.get(f"{REPO}/issues/1").mock(return_value=Response(200, json=_issue(1)))
+    assert _track(client, board, column, 1).status_code == 200
+
+    back = client.put(url, json={"kind": "filter", "labels": ["bug"]}).json()
+    assert back["kind"] == "filter" and back["labels"] == ["bug"]
+    assert session.exec(select(TrackedIssue)).all() == []
+    assert _track(client, board, column, 1).status_code == 400

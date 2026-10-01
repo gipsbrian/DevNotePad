@@ -37,6 +37,9 @@ export function ColumnEditorModal({
   const [issueType, setIssueType] = useState<string>(column?.issue_type ?? "");
 
   const me = settings?.github_username ?? null;
+  // Easy to mistake for "a column with no filter": it's every open issue.
+  const unfiltered =
+    state === "open" && labels.length === 0 && !milestone && !assignee && !creator && !issueType;
 
   function toggleLabel(labelName: string) {
     setLabels((prev) => (prev.includes(labelName) ? prev.filter((l) => l !== labelName) : [...prev, labelName]));
@@ -52,38 +55,41 @@ export function ColumnEditorModal({
       <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-title">{editing ? "Edit column" : "New column"}</h2>
 
-        {/* The kind is chosen once: a column's issues would change meaning
-            entirely if it switched. */}
-        {!editing && (
-          <div className="column-kind" role="radiogroup" aria-label="Column type">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={kind === "filter"}
-              className={`column-kind-option${kind === "filter" ? " on" : ""}`}
-              onClick={() => setKind("filter")}
-            >
-              <strong>Filter</strong>
-              <span>Shows every issue matching labels, people or a milestone.</span>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={kind === "tracking"}
-              className={`column-kind-option${kind === "tracking" ? " on" : ""}`}
-              onClick={() => setKind("tracking")}
-            >
-              <strong>Tracking</strong>
-              <span>Holds the issues you drag into it, whatever their labels.</span>
-            </button>
-          </div>
-        )}
+        <div className="column-kind" role="radiogroup" aria-label="Column type">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={kind === "filter"}
+            className={`column-kind-option${kind === "filter" ? " on" : ""}`}
+            onClick={() => setKind("filter")}
+          >
+            <strong>Filter</strong>
+            <span>Shows every issue matching labels, people or a milestone.</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={kind === "tracking"}
+            className={`column-kind-option${kind === "tracking" ? " on" : ""}`}
+            onClick={() => setKind("tracking")}
+          >
+            <strong>Tracking</strong>
+            <span>Holds the issues you drag into it, whatever their labels.</span>
+          </button>
+        </div>
 
         <p className="empty-hint">
           {kind === "tracking"
             ? "Drag cards in to keep an eye on them. Nothing changes on GitHub, and closed issues drop out by themselves."
             : "Built from labels, milestones and people that already exist on this repo — this app never creates new ones."}
         </p>
+        {column && column.kind !== kind && (
+          <p className="column-kind-note">
+            {kind === "tracking"
+              ? "Its filter is cleared and it starts empty, ready for issues to be dragged in."
+              : "The issues tracked in it are let go; it shows whatever the filter below matches."}
+          </p>
+        )}
 
         <div className="form-row" style={{ marginTop: 18 }}>
           <label>Column name</label>
@@ -184,6 +190,16 @@ export function ColumnEditorModal({
               </select>
             </div>
           </>
+        )}
+
+        {kind === "filter" && unfiltered && (
+          <p className="column-kind-note">
+            Nothing picked, so this column shows every open issue on the repo.{" "}
+            <button type="button" className="link-btn" onClick={() => setKind("tracking")}>
+              Make it a tracking column instead
+            </button>{" "}
+            to choose its issues by dragging them in.
+          </p>
         )}
 
         <div className="modal-foot">

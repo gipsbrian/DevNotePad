@@ -204,6 +204,9 @@ class ColumnCreate(BaseModel):
 
 class ColumnUpdate(BaseModel):
     name: Optional[str] = None
+    # Switching to "tracking" clears the filter and starts empty; switching
+    # back to "filter" lets go of the tracked issues.
+    kind: Optional[Literal["filter", "tracking"]] = None
     state: Optional[str] = None
     labels: Optional[List[str]] = None
     # "" clears these back to "any".

@@ -187,6 +187,12 @@ On a dashboard, click **+ Add column** and choose its type:
   it, whatever their labels -- for keeping an eye on a handful of issues
   that no filter describes. See [Tracking columns](#tracking-columns).
 
+A filter column with nothing picked shows every open issue on the repo;
+the dialog says so and offers to make it a tracking column instead. An
+existing column can switch type from its **Edit column** dialog: becoming
+a tracking column clears its filter and starts it empty, and going back to
+a filter lets go of the issues it tracked.
+
 For a filter column, pick from the repo's *existing*
 labels, milestones, assignees, issue authors and issue types — nothing is typed freely
 except the column's own name. Edit a column's filters later with the

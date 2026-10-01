@@ -482,6 +482,14 @@ def update_column(
         column.name = payload.name
     if payload.position is not None:
         column.position = payload.position
+    if payload.kind == "tracking" and column.kind != "tracking":
+        column.kind = "tracking"
+        column.state = "open"
+        column.labels = []
+        column.milestone = column.assignee = column.creator = column.issue_type = None
+    elif payload.kind == "filter" and column.kind == "tracking":
+        _forget_tracked(session, column)
+        column.kind = "filter"
     if column.kind == "tracking":
         # Only the name and place change; filters would mean nothing here.
         session.add(column)
