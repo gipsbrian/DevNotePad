@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { createPortal } from "react-dom";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
 import { api } from "../api/client";
 import type { Column, DashboardDetail, IssueCard, Note, RepoMetadata, Settings } from "../types/api";
 import { TokenBadge } from "../components/TokenBadge";
 import { ColumnView } from "../components/ColumnView";
+import { CardGhost } from "../components/CardGhost";
 import { ColumnEditorModal, type ColumnFilterPayload } from "../components/ColumnEditorModal";
 import { IssueStack, MAX_OPEN_ISSUES } from "../components/IssueStack";
 import { ClosedSection, CLOSED_RANGES } from "../components/ClosedSection";
@@ -335,15 +346,66 @@ export function DashboardBoardPage() {
     }
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
+  /** Optimistic: the card lands at once and the server's copy replaces it.
+   * From another tracking column it moves; from a filter column it's a
+   * copy, since the filter still matches it. */
+  async function handleTrackIssue(issueNumber: number, columnId: number, fromColumnId?: number) {
+    const card = Object.values(issuesByColumn)
+      .flat()
+      .find((i) => i.number === issueNumber);
+    const place = (list: IssueCard[] | undefined, fresh: IssueCard) =>
+      list?.some((i) => i.number === issueNumber)
+        ? list.map((i) => (i.number === issueNumber ? fresh : i))
+        : [fresh, ...(list ?? [])];
+    setIssuesByColumn((prev) => {
+      const next = { ...prev };
+      if (card) next[columnId] = place(prev[columnId], card);
+      if (fromColumnId !== undefined) next[fromColumnId] = (prev[fromColumnId] ?? []).filter((i) => i.number !== issueNumber);
+      return next;
+    });
+    try {
+      const fresh = await api.trackIssue(dashboardId, columnId, issueNumber, fromColumnId);
+      setIssuesByColumn((prev) => ({ ...prev, [columnId]: place(prev[columnId], fresh) }));
+    } catch (e) {
+      setActionError((e as Error).message);
+      refreshColumnIssues(columnId);
+      if (fromColumnId !== undefined) refreshColumnIssues(fromColumnId);
+    }
+  }
 
-    const issueNumber = active.data.current?.issueNumber as number | undefined;
-    const targetColumnId = over.data.current?.columnId as number | undefined;
-    const sourceColumnId = active.data.current?.sourceColumnId;
-    if (!issueNumber || !targetColumnId || targetColumnId === sourceColumnId) return;
-    handleMoveIssue(issueNumber, targetColumnId);
+  async function handleUntrackIssue(issueNumber: number, columnId: number) {
+    setIssuesByColumn((prev) => ({ ...prev, [columnId]: (prev[columnId] ?? []).filter((i) => i.number !== issueNumber) }));
+    try {
+      await api.untrackIssue(dashboardId, columnId, issueNumber);
+    } catch (e) {
+      setActionError((e as Error).message);
+      refreshColumnIssues(columnId);
+    }
+  }
+
+  const [dragging, setDragging] = useState<IssueCard | null>(null);
+  // Whether letting go now would land the card. Off, the copy glides back
+  // to where it came from; on, it vanishes as the card appears in place.
+  const [dropLands, setDropLands] = useState(false);
+
+  function landsIn(event: DragOverEvent | DragEndEvent): number | null {
+    const target = event.over?.data.current;
+    const source = event.active.data.current?.sourceColumnId;
+    return target?.tracking && target.columnId !== source ? (target.columnId as number) : null;
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setDragging((event.active.data.current?.issue as IssueCard | undefined) ?? null);
+    setDropLands(false);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setDragging(null);
+    const target = landsIn(event);
+    const issueNumber = event.active.data.current?.issueNumber as number | undefined;
+    if (target === null || !issueNumber) return;
+    const source = columns.find((c) => c.id === event.active.data.current?.sourceColumnId);
+    handleTrackIssue(issueNumber, target, source?.kind === "tracking" ? source.id : undefined);
   }
 
   async function openColumnEditor(column: Column | null = null) {
@@ -420,6 +482,8 @@ export function DashboardBoardPage() {
 
   const canManage = dashboard.access === "manage";
   const canWrite = dashboard.can_write;
+  // Cards only drag into tracking columns, which managers fill.
+  const canDrag = canManage && columns.some((c) => c.kind === "tracking");
   const accent = dashboard.accent_color ?? "#6d5efc";
   // The board canvas is either the dashboard's wallpaper or a rich
   // monochromatic gradient derived from its accent — light top-left,
@@ -564,7 +628,13 @@ export function DashboardBoardPage() {
           />
         )}
 
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragOver={(e) => setDropLands(landsIn(e) !== null)}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setDragging(null)}
+        >
           <div className="board">
             {columns.map((column) => (
               <ColumnView
@@ -583,10 +653,13 @@ export function DashboardBoardPage() {
                 onOpenIssue={openIssue}
                 onMoveIssue={handleMoveIssue}
                 onCloseIssue={handleCloseIssue}
+                onTrackIssue={handleTrackIssue}
+                onUntrackIssue={handleUntrackIssue}
                 onEditColumn={openColumnEditor}
                 onDeleteColumn={handleDeleteColumn}
                 onMoveColumn={handleMoveColumn}
                 canManage={canManage}
+                canDrag={canDrag}
                 canWrite={canWrite}
                 writeBlockReason={dashboard.write_block_reason}
                 canMoveLeft={!column.virtual && columns.filter((c) => !c.virtual).findIndex((c) => c.id === column.id) > 0}
@@ -605,11 +678,20 @@ export function DashboardBoardPage() {
             )}
 
           </div>
+          {/* In the body, clear of every column's scroll box and transform. */}
+          {createPortal(
+            <DragOverlay dropAnimation={dropLands ? null : undefined}>
+              {dragging && <CardGhost issue={dragging} />}
+            </DragOverlay>,
+            document.body
+          )}
         </DndContext>
 
         {/* Floats above the board rather than living in the column
-            scroll, so it's never scrolled out of reach. */}
-        <StickyColumn dashboardId={dashboardId} />
+            scroll, so it's never scrolled out of reach. In the body, since
+            the board's own layer would keep it under open issues whatever
+            its z-index. */}
+        {createPortal(<StickyColumn dashboardId={dashboardId} issuesOpen={openIssues.length > 0} />, document.body)}
 
         <ClosedSection
           issues={closedIssues.filter((i) => matchesSearch(i, query))}

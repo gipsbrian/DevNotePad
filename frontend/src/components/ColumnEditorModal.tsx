@@ -3,6 +3,7 @@ import type { Column, RepoMetadata, Settings } from "../types/api";
 
 export interface ColumnFilterPayload {
   name: string;
+  kind: "filter" | "tracking";
   state: string | null;
   labels: string[];
   milestone: string | null;
@@ -26,6 +27,7 @@ export function ColumnEditorModal({
   onSubmit: (payload: ColumnFilterPayload) => void;
 }) {
   const editing = !!column;
+  const [kind, setKind] = useState<"filter" | "tracking">(column?.kind ?? "filter");
   const [name, setName] = useState(column?.name ?? "");
   const [state, setState] = useState<string>(column?.state ?? "open");
   const [labels, setLabels] = useState<string[]>(column?.labels ?? []);
@@ -49,101 +51,140 @@ export function ColumnEditorModal({
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-title">{editing ? "Edit column" : "New column"}</h2>
+
+        {/* The kind is chosen once: a column's issues would change meaning
+            entirely if it switched. */}
+        {!editing && (
+          <div className="column-kind" role="radiogroup" aria-label="Column type">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={kind === "filter"}
+              className={`column-kind-option${kind === "filter" ? " on" : ""}`}
+              onClick={() => setKind("filter")}
+            >
+              <strong>Filter</strong>
+              <span>Shows every issue matching labels, people or a milestone.</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={kind === "tracking"}
+              className={`column-kind-option${kind === "tracking" ? " on" : ""}`}
+              onClick={() => setKind("tracking")}
+            >
+              <strong>Tracking</strong>
+              <span>Holds the issues you drag into it, whatever their labels.</span>
+            </button>
+          </div>
+        )}
+
         <p className="empty-hint">
-          Built from labels, milestones and people that already exist on this repo — this app never creates new ones.
+          {kind === "tracking"
+            ? "Drag cards in to keep an eye on them. Nothing changes on GitHub, and closed issues drop out by themselves."
+            : "Built from labels, milestones and people that already exist on this repo — this app never creates new ones."}
         </p>
 
         <div className="form-row" style={{ marginTop: 18 }}>
           <label>Column name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priority bugs" autoFocus />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={kind === "tracking" ? "e.g. Watching" : "e.g. Priority bugs"}
+            autoFocus
+          />
         </div>
 
-        <div className="form-row">
-          <label>State</label>
-          <select value={state} onChange={(e) => setState(e.target.value)}>
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
-            <option value="all">Any</option>
-          </select>
-        </div>
+        {kind === "filter" && (
+          <>
+            <div className="form-row">
+              <label>State</label>
+              <select value={state} onChange={(e) => setState(e.target.value)}>
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+                <option value="all">Any</option>
+              </select>
+            </div>
 
-        <div className="form-row">
-          <label>Labels {labels.length > 0 && <span className="count-pill">{labels.length}</span>}</label>
-          <div className="label-picker">
-            {metadata.labels.map((l) => (
-              <button
-                type="button"
-                key={l.name}
-                onClick={() => toggleLabel(l.name)}
-                className={`label-pick${labels.includes(l.name) ? " on" : ""}`}
-              >
-                <i style={{ background: `#${l.color}` }} />
-                {l.name}
-              </button>
-            ))}
-            {metadata.labels.length === 0 && <span className="empty-hint">No labels on this repo yet.</span>}
-          </div>
-        </div>
+            <div className="form-row">
+              <label>Labels {labels.length > 0 && <span className="count-pill">{labels.length}</span>}</label>
+              <div className="label-picker">
+                {metadata.labels.map((l) => (
+                  <button
+                    type="button"
+                    key={l.name}
+                    onClick={() => toggleLabel(l.name)}
+                    className={`label-pick${labels.includes(l.name) ? " on" : ""}`}
+                  >
+                    <i style={{ background: `#${l.color}` }} />
+                    {l.name}
+                  </button>
+                ))}
+                {metadata.labels.length === 0 && <span className="empty-hint">No labels on this repo yet.</span>}
+              </div>
+            </div>
 
-        <div style={{ display: "flex", gap: 12 }}>
-          <div className="form-row" style={{ flex: 1 }}>
-            <label>Assignee</label>
-            <select value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-              <option value="">Anyone</option>
-              {people.map((login) => (
-                <option key={login} value={login}>
-                  {login}
-                  {login === me ? " (me)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-row" style={{ flex: 1 }}>
-            <label>Created by</label>
-            <select value={creator} onChange={(e) => setCreator(e.target.value)}>
-              <option value="">Anyone</option>
-              {people.map((login) => (
-                <option key={login} value={login}>
-                  {login}
-                  {login === me ? " (me)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div className="form-row" style={{ flex: 1 }}>
+                <label>Assignee</label>
+                <select value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                  <option value="">Anyone</option>
+                  {people.map((login) => (
+                    <option key={login} value={login}>
+                      {login}
+                      {login === me ? " (me)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-row" style={{ flex: 1 }}>
+                <label>Created by</label>
+                <select value={creator} onChange={(e) => setCreator(e.target.value)}>
+                  <option value="">Anyone</option>
+                  {people.map((login) => (
+                    <option key={login} value={login}>
+                      {login}
+                      {login === me ? " (me)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-        {metadata.issue_types.length > 0 && (
-          <div className="form-row">
-            <label>Issue type</label>
-            <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>
-              <option value="">Any</option>
-              {metadata.issue_types.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <p className="empty-hint" style={{ marginTop: 6 }}>
-              {metadata.issue_types_source === "repo"
-                ? "Types seen on this repo's issues."
-                : metadata.issue_types_source === "repo+org"
-                  ? "Types used on this repo, plus others defined for the org."
-                  : "Types defined for the organization."}
-            </p>
-          </div>
+            {metadata.issue_types.length > 0 && (
+              <div className="form-row">
+                <label>Issue type</label>
+                <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>
+                  <option value="">Any</option>
+                  {metadata.issue_types.map((t) => (
+                    <option key={t.name} value={t.name}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="empty-hint" style={{ marginTop: 6 }}>
+                  {metadata.issue_types_source === "repo"
+                    ? "Types seen on this repo's issues."
+                    : metadata.issue_types_source === "repo+org"
+                      ? "Types used on this repo, plus others defined for the org."
+                      : "Types defined for the organization."}
+                </p>
+              </div>
+            )}
+
+            <div className="form-row">
+              <label>Milestone</label>
+              <select value={milestone} onChange={(e) => setMilestone(e.target.value)}>
+                <option value="">Any</option>
+                {metadata.milestones.map((m) => (
+                  <option key={m.number} value={String(m.number)}>
+                    {m.title} ({m.state})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
         )}
-
-        <div className="form-row">
-          <label>Milestone</label>
-          <select value={milestone} onChange={(e) => setMilestone(e.target.value)}>
-            <option value="">Any</option>
-            {metadata.milestones.map((m) => (
-              <option key={m.number} value={String(m.number)}>
-                {m.title} ({m.state})
-              </option>
-            ))}
-          </select>
-        </div>
 
         <div className="modal-foot">
           <button className="btn ghost" onClick={onCancel}>
@@ -155,6 +196,7 @@ export function ColumnEditorModal({
             onClick={() =>
               onSubmit({
                 name,
+                kind,
                 state: state === "all" ? null : state,
                 labels,
                 milestone: milestone || "",

@@ -20,7 +20,7 @@ engine = create_engine(
 # would keep the old shape and every query naming these would fail.
 # Full migration tooling is overkill here; additive ALTERs are enough.
 _ADDED_COLUMNS: dict[str, dict[str, str]] = {
-    "column": {"creator": "VARCHAR", "issue_type": "VARCHAR"},
+    "column": {"creator": "VARCHAR", "issue_type": "VARCHAR", "kind": "VARCHAR NOT NULL DEFAULT 'filter'"},
     "dashboard": {
         "accent_color": "VARCHAR",
         "background_url": "VARCHAR",

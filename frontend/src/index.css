@@ -783,6 +783,72 @@ a {
   box-shadow: var(--shadow-md);
 }
 
+/* While a card is dragged: tracking columns invite the drop, filter
+   columns step back, since they can't take one. */
+.column {
+  transition: box-shadow 0.15s ease, outline-color 0.15s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
+.column.drop-target {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.column.drop-target.is-over {
+  outline-style: solid;
+  outline-color: var(--accent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow-md);
+}
+
+.column.no-drop {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+/* The copy that follows the pointer, lifted off the board. */
+.card-ghost {
+  cursor: grabbing;
+  transform: rotate(2deg) scale(1.03);
+  box-shadow: var(--shadow-lg);
+}
+
+.column-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.column-kind-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.column-kind-option span {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  line-height: 1.4;
+}
+
+.column-kind-option.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-ghost {
+    transform: none;
+  }
+}
+
 .column-header {
   padding: 13px 14px 10px;
   display: flex;
@@ -999,7 +1065,7 @@ a {
 .note-wall-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 75; /* above the pad, even when it sits over open issues */
   display: grid;
   place-items: center;
   padding: 4vh 4vw;
@@ -1227,6 +1293,36 @@ a {
 }
 
 .sticky-tab svg { width: 16px; height: 16px; }
+
+/* With issues open, the pad waits as a bubble above their backdrop
+   (z-index 60) and unfolds from its corner when brought in front. */
+.sticky-bubble,
+.sticky-column.floating.in-front {
+  z-index: 70;
+}
+
+.sticky-column.floating.in-front {
+  animation: sticky-front-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+  box-shadow: 0 18px 50px rgba(8, 12, 20, 0.45);
+}
+
+.sticky-column.floating.in-front.bottom-right { transform-origin: bottom right; }
+.sticky-column.floating.in-front.bottom-left  { transform-origin: bottom left; }
+.sticky-column.floating.in-front.top-right    { transform-origin: top right; }
+.sticky-column.floating.in-front.top-left     { transform-origin: top left; }
+
+@keyframes sticky-front-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticky-column.floating.in-front {
+    animation: none;
+  }
+}
 
 .sticky-tab-count {
   background: rgba(74, 58, 0, 0.2);

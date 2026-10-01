@@ -256,6 +256,9 @@ class Column(SQLModel, table=True):
     # GitHub's org-level issue type (e.g. "Bug", "Feature"), distinct from
     # labels. Stored by name, which is what the REST filter takes.
     issue_type: Optional[str] = None
+    # "filter": issues matching the fields above. "tracking": exactly the
+    # issues dropped into it (TrackedIssue), the filter fields unused.
+    kind: str = Field(default="filter", sa_column_kwargs={"server_default": "filter"})
 
     @property
     def labels(self) -> List[str]:
@@ -266,6 +269,19 @@ class Column(SQLModel, table=True):
     @labels.setter
     def labels(self, value: List[str]) -> None:
         self.labels_csv = ",".join(value) if value else None
+
+
+class TrackedIssue(SQLModel, table=True):
+    """An issue dropped into a tracking column. Lives only here, never on
+    GitHub; dropped once the issue is closed, deleted or transferred."""
+
+    __table_args__ = (UniqueConstraint("column_id", "issue_number"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    column_id: int = Field(foreign_key="column.id", index=True)
+    issue_number: int
+    added_by: Optional[int] = Field(default=None, foreign_key="user.id")
+    added_at: datetime = Field(default_factory=utcnow)
 
 
 class StickyNote(SQLModel, table=True):

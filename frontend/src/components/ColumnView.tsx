@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
 import type { Column, IssueCard, Note } from "../types/api";
 import { IssueCardView } from "./IssueCardView";
@@ -34,6 +34,8 @@ export function ColumnView({
   onOpenIssue,
   onMoveIssue,
   onCloseIssue,
+  onTrackIssue,
+  onUntrackIssue,
   onEditColumn,
   onDeleteColumn,
   onMoveColumn,
@@ -41,6 +43,7 @@ export function ColumnView({
   canMoveLeft,
   canMoveRight,
   canManage = true,
+  canDrag = false,
   canWrite = true,
   writeBlockReason = null,
 }: {
@@ -55,6 +58,9 @@ export function ColumnView({
   onOpenIssue: (issueNumber: number) => void;
   onMoveIssue: (issueNumber: number, targetColumnId: number) => void;
   onCloseIssue: (issueNumber: number) => void;
+  /** Into a tracking column; `fromColumnId` set when leaving one. */
+  onTrackIssue: (issueNumber: number, columnId: number, fromColumnId?: number) => void;
+  onUntrackIssue: (issueNumber: number, columnId: number) => void;
   onEditColumn: (column: Column) => void;
   onDeleteColumn: (columnId: number) => void;
   onMoveColumn: (columnId: number, direction: -1 | 1) => void;
@@ -63,15 +69,31 @@ export function ColumnView({
   canMoveRight: boolean;
   /** Editing, moving and removing the column. */
   canManage?: boolean;
+  /** Whether its cards can be dragged into tracking columns. */
+  canDrag?: boolean;
   /** Moving and closing its cards on GitHub. */
   canWrite?: boolean;
   writeBlockReason?: string | null;
 }) {
+  const tracking = column.kind === "tracking";
+  // Only tracking columns take drops: a filter column shows whatever
+  // matches its filter, so dropping into one would mean nothing.
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `column-${column.id}`,
-    data: { type: "cards", columnId: column.id },
-    disabled: !column.drag_compatible || !canWrite,
+    data: { type: "cards", columnId: column.id, tracking },
+    disabled: !tracking || !canManage,
   });
+  const { active } = useDndContext();
+  const dragFrom = active?.data.current?.sourceColumnId as number | undefined;
+  const dropState = !active
+    ? ""
+    : tracking && canManage && dragFrom !== column.id
+      ? isOver
+        ? " drop-target is-over"
+        : " drop-target"
+      : dragFrom === column.id
+        ? ""
+        : " no-drop";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -110,7 +132,7 @@ export function ColumnView({
     setCopied(ok ? `Copied ${list.length} issue${list.length === 1 ? "" : "s"}` : "Couldn’t copy");
   }
 
-  const chips = filterChips(column);
+  const chips = tracking ? ["tracking"] : filterChips(column);
 
   const [limit, setLimit] = useState(BATCH);
   const drawn = issues?.slice(0, limit);
@@ -130,7 +152,7 @@ export function ColumnView({
   }, [hasMore, limit]);
 
   return (
-    <section className={`column${isOver && column.drag_compatible ? " is-over" : ""}`}>
+    <section className={`column${tracking ? " tracking" : ""}${dropState}`}>
       <header className="column-header">
         <div className="column-title">
           <span className="column-dot" style={{ background: accentColor }} />
@@ -153,6 +175,7 @@ export function ColumnView({
               auto
             </span>
           )}
+
           {!column.virtual && canManage && (
             <>
               <button
@@ -242,6 +265,12 @@ export function ColumnView({
               onOpen={onOpenIssue}
               onMove={onMoveIssue}
               onCloseIssue={onCloseIssue}
+              onTrack={onTrackIssue}
+              onUntrack={onUntrackIssue}
+              trackingColumns={canManage ? allColumns.filter((c) => c.kind === "tracking" && c.id !== column.id) : []}
+              inTrackingColumn={tracking}
+              canManage={canManage}
+              draggable={canDrag}
               canWrite={canWrite}
               writeBlockReason={writeBlockReason}
             />
@@ -254,7 +283,15 @@ export function ColumnView({
             Showing {limit} of {issues?.length} · more as you scroll
           </button>
         )}
-        {!loading && issues?.length === 0 && <div className="column-empty">Nothing here right now.</div>}
+        {!loading && issues?.length === 0 && (
+          <div className="column-empty">
+            {tracking
+              ? canManage
+                ? "Drag issues here to keep track of them."
+                : "Nothing tracked here yet."
+              : "Nothing here right now."}
+          </div>
+        )}
       </div>
     </section>
   );

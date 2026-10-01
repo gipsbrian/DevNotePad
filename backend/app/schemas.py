@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -191,6 +191,8 @@ class DefaultOrganizationUpdate(BaseModel):
 
 class ColumnCreate(BaseModel):
     name: str
+    # "tracking" ignores every filter below; see Column.kind.
+    kind: Literal["filter", "tracking"] = "filter"
     state: Optional[str] = "open"
     labels: List[str] = []
     milestone: Optional[str] = None
@@ -233,6 +235,7 @@ class ColumnOut(BaseModel):
     # from the saved username rather than stored, so they can't be edited
     # or deleted and always sit last.
     virtual: bool = False
+    kind: str = "filter"
     # Whether dragging/moving into this column maps to one unambiguous
     # mutation — the frontend uses this to enable/disable drop.
     drag_compatible: bool
@@ -333,6 +336,13 @@ class SubIssueOut(BaseModel):
 
 class MoveIssueRequest(BaseModel):
     target_column_id: int
+
+
+class TrackIssueRequest(BaseModel):
+    issue_number: int
+    # A tracking column on the same board to take it out of: dragging
+    # between two tracking columns moves the issue rather than copying it.
+    from_column_id: Optional[int] = None
 
 
 # ---- Sticky notes (board-level scratch pad) ----

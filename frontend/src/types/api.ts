@@ -105,6 +105,8 @@ export interface Column {
   creator: string | null;
   issue_type: string | null;
   virtual: boolean;
+  /** "tracking": holds exactly the issues dropped into it, no filter. */
+  kind: "filter" | "tracking";
   drag_compatible: boolean;
 }
 

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -8,7 +9,7 @@ from ..access import MANAGE, VIEW, board_access, get_board, read_token, write_bl
 from ..auth import require_user
 from ..db import get_session
 from ..github_client import GitHubClient, GitHubError
-from ..models import BoardShare, Column, Dashboard, LocalNote, Organization, StickyNote, User
+from ..models import BoardShare, Column, Dashboard, LocalNote, Organization, StickyNote, TrackedIssue, User
 from ..orgs import current_organization, membership, switch_to
 from ..repo_ref import parse_repo_ref
 from ..settings_store import get_settings
@@ -30,6 +31,7 @@ from ..schemas import (
     CommentOut,
     MoveIssueRequest,
     SubIssueOut,
+    TrackIssueRequest,
     RepoMetadataOut,
     LabelOut,
     MilestoneOut,
@@ -45,6 +47,8 @@ router = APIRouter(prefix="/api/dashboards", tags=["dashboards"])
 # is dropped/moved into them. Anything else is view-only for
 # drag/move purposes.
 def _drag_compatible(column: Column) -> bool:
+    if column.kind == "tracking":
+        return False
     no_people = (
         not column.milestone
         and not column.assignee
@@ -98,6 +102,7 @@ def _column_out(c: Column, dashboard_uuid: str) -> ColumnOut:
         creator=c.creator,
         issue_type=c.issue_type,
         virtual=False,
+        kind=c.kind,
         drag_compatible=_drag_compatible(c),
     )
 
@@ -287,6 +292,7 @@ async def get_dashboard(
 def delete_dashboard(dashboard_uuid: str, session: Session = Depends(get_session), user: User = Depends(require_user)):
     dashboard = get_board(session, dashboard_uuid, user, MANAGE)
     for column in session.exec(select(Column).where(Column.dashboard_id == dashboard.id)):
+        _forget_tracked(session, column)
         session.delete(column)
     for note in session.exec(select(LocalNote).where(LocalNote.dashboard_id == dashboard.id)):
         session.delete(note)
@@ -400,18 +406,22 @@ def create_column(dashboard_uuid: str, payload: ColumnCreate, session: Session =
         position = max((c.position for c in existing), default=-1) + 1
     else:
         position = payload.position
-    column = Column(
-        dashboard_id=dashboard.id,
-        name=payload.name,
-        state=payload.state,
-        # Normalize "" (the UI's "any") to NULL rather than storing blanks.
-        milestone=payload.milestone or None,
-        assignee=payload.assignee or None,
-        creator=payload.creator or None,
-        issue_type=payload.issue_type or None,
-        position=position,
-    )
-    column.labels = payload.labels
+    if payload.kind == "tracking":
+        # Holds whatever is dropped into it, so there's nothing to filter on.
+        column = Column(dashboard_id=dashboard.id, name=payload.name, kind="tracking", state="open", position=position)
+    else:
+        column = Column(
+            dashboard_id=dashboard.id,
+            name=payload.name,
+            state=payload.state,
+            # Normalize "" (the UI's "any") to NULL rather than storing blanks.
+            milestone=payload.milestone or None,
+            assignee=payload.assignee or None,
+            creator=payload.creator or None,
+            issue_type=payload.issue_type or None,
+            position=position,
+        )
+        column.labels = payload.labels
     session.add(column)
     session.commit()
     session.refresh(column)
@@ -470,6 +480,14 @@ def update_column(
     column = _get_column_or_404(session, dashboard.id, column_id)
     if payload.name is not None:
         column.name = payload.name
+    if payload.position is not None:
+        column.position = payload.position
+    if column.kind == "tracking":
+        # Only the name and place change; filters would mean nothing here.
+        session.add(column)
+        session.commit()
+        session.refresh(column)
+        return _column_out(column, dashboard_uuid)
     if payload.state is not None:
         column.state = payload.state
     if payload.labels is not None:
@@ -483,8 +501,6 @@ def update_column(
         column.creator = payload.creator or None
     if payload.issue_type is not None:
         column.issue_type = payload.issue_type or None
-    if payload.position is not None:
-        column.position = payload.position
     session.add(column)
     session.commit()
     session.refresh(column)
@@ -495,7 +511,148 @@ def update_column(
 def delete_column(dashboard_uuid: str, column_id: int, session: Session = Depends(get_session), user: User = Depends(require_user)):
     dashboard = get_board(session, dashboard_uuid, user, MANAGE)
     column = _get_column_or_404(session, dashboard.id, column_id)
+    _forget_tracked(session, column)
     session.delete(column)
+    session.commit()
+
+
+# ---- Tracking columns ----
+
+# Each tracked issue is one GitHub request when the column loads, so a
+# column holds a bounded number.
+TRACKING_LIMIT = 100
+
+
+def _forget_tracked(session: Session, column: Column) -> None:
+    # SQLite can reuse a deleted column's id, which would hand its tracked
+    # issues to the next column created.
+    for row in session.exec(select(TrackedIssue).where(TrackedIssue.column_id == column.id)):
+        session.delete(row)
+
+
+def _trackable(issue: Optional[dict], dashboard: Dashboard) -> bool:
+    """Open, an issue rather than a pull request, and still in this repo. A
+    transferred issue answers 301 with no issue in the body."""
+    if not issue or issue.get("state") != "open" or "pull_request" in issue:
+        return False
+    repo_url = (issue.get("repository_url") or "").lower()
+    return repo_url.endswith(f"/repos/{dashboard.repo_owner}/{dashboard.repo_name}".lower())
+
+
+def _tracking_column_or_400(session: Session, dashboard: Dashboard, column_id: int) -> Column:
+    column = _get_column_or_404(session, dashboard.id, column_id)
+    if column.kind != "tracking":
+        raise HTTPException(400, "Only tracking columns take dropped issues; this one is filled by its filter.")
+    return column
+
+
+async def _tracked_issues(session: Session, dashboard: Dashboard, column: Column) -> list[dict]:
+    """The column's issues, newest first. Any that are closed, deleted or
+    transferred are dropped from the column on the way."""
+    rows = session.exec(
+        select(TrackedIssue)
+        .where(TrackedIssue.column_id == column.id)
+        .order_by(TrackedIssue.added_at.desc(), TrackedIssue.id.desc())
+    ).all()
+    if not rows:
+        return []
+
+    client = GitHubClient(read_token(session, dashboard))
+    gate = asyncio.Semaphore(8)
+
+    async def fetch(number: int) -> Optional[dict]:
+        async with gate:
+            try:
+                return await client.get_issue(dashboard.repo_owner, dashboard.repo_name, number)
+            except GitHubError as exc:
+                if exc.status_code in (404, 410):
+                    return None
+                raise
+
+    try:
+        issues = await asyncio.gather(*(fetch(row.issue_number) for row in rows))
+    except GitHubError as exc:
+        raise HTTPException(exc.status_code, exc.message)
+    finally:
+        await client.aclose()
+
+    kept = []
+    for row, issue in zip(rows, issues):
+        if _trackable(issue, dashboard):
+            kept.append(issue)
+        else:
+            session.delete(row)
+    session.commit()
+    return kept
+
+
+@router.post("/{dashboard_uuid}/columns/{column_id}/tracked", response_model=IssueCardOut)
+async def track_issue(
+    dashboard_uuid: str,
+    column_id: int,
+    payload: TrackIssueRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(require_user),
+):
+    """Adds an open issue to a tracking column. Coming from another tracking
+    column on the board, it moves; from a filter column, it's a copy, since
+    the filter still matches it."""
+    dashboard = get_board(session, dashboard_uuid, user, MANAGE)
+    column = _tracking_column_or_400(session, dashboard, column_id)
+
+    existing = session.exec(
+        select(TrackedIssue).where(TrackedIssue.column_id == column.id, TrackedIssue.issue_number == payload.issue_number)
+    ).first()
+    if not existing:
+        count = len(session.exec(select(TrackedIssue.id).where(TrackedIssue.column_id == column.id)).all())
+        if count >= TRACKING_LIMIT:
+            raise HTTPException(409, f"A tracking column holds up to {TRACKING_LIMIT} issues. Remove some first.")
+
+    client = GitHubClient(read_token(session, dashboard))
+    try:
+        issue = await client.get_issue(dashboard.repo_owner, dashboard.repo_name, payload.issue_number)
+    except GitHubError as exc:
+        raise HTTPException(exc.status_code, exc.message)
+    finally:
+        await client.aclose()
+    if not _trackable(issue, dashboard):
+        raise HTTPException(422, f"#{payload.issue_number} isn't an open issue in this repo.")
+
+    if not existing:
+        session.add(TrackedIssue(column_id=column.id, issue_number=payload.issue_number, added_by=user.id))
+    source_id = payload.from_column_id
+    if source_id is not None and source_id != column.id:
+        source = session.get(Column, source_id)
+        # Only ever this board's column; a filter column has nothing to remove.
+        if source and source.dashboard_id == dashboard.id:
+            for row in session.exec(
+                select(TrackedIssue).where(
+                    TrackedIssue.column_id == source.id, TrackedIssue.issue_number == payload.issue_number
+                )
+            ):
+                session.delete(row)
+    session.commit()
+
+    noted = session.exec(
+        select(LocalNote).where(
+            LocalNote.dashboard_id == dashboard.id,
+            LocalNote.user_id == user.id,
+            LocalNote.issue_number == payload.issue_number,
+        )
+    ).first()
+    return issue_to_card(issue, noted is not None)
+
+
+@router.delete("/{dashboard_uuid}/columns/{column_id}/tracked/{number}", status_code=204)
+def untrack_issue(
+    dashboard_uuid: str, column_id: int, number: int, session: Session = Depends(get_session), user: User = Depends(require_user)
+):
+    dashboard = get_board(session, dashboard_uuid, user, MANAGE)
+    column = _tracking_column_or_400(session, dashboard, column_id)
+    for row in session.exec(
+        select(TrackedIssue).where(TrackedIssue.column_id == column.id, TrackedIssue.issue_number == number)
+    ):
+        session.delete(row)
     session.commit()
 
 
@@ -507,6 +664,15 @@ async def list_column_issues(
 ):
     dashboard = get_board(session, dashboard_uuid, user, VIEW)
     spec = _column_spec(session, dashboard, user, column_id)
+    if spec.kind == "tracking":
+        issues = await _tracked_issues(session, dashboard, _get_column_or_404(session, dashboard.id, column_id))
+        noted = {
+            n.issue_number
+            for n in session.exec(
+                select(LocalNote).where(LocalNote.dashboard_id == dashboard.id, LocalNote.user_id == user.id)
+            ).all()
+        }
+        return [issue_to_card(issue, issue["number"] in noted) for issue in issues]
     client = GitHubClient(read_token(session, dashboard))
     try:
         issues = await client.list_issues(

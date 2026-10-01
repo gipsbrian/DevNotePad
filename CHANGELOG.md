@@ -8,6 +8,29 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ## [Unreleased]
 
+### Added
+
+- **Tracking columns.** A column type with no filter: it holds exactly
+  the issues dragged into it, whatever their labels, and closed, deleted
+  or transferred issues drop out by themselves. Dragging between two
+  tracking columns moves a card; dragging from a filter column copies it.
+  Kept by DevNotePad, never written to GitHub, up to 100 per column.
+- **Motion.** Opening an issue grows it out of its card and closing
+  shrinks it back; cards arriving in or leaving a column animate while
+  the others slide into place. Everything honours reduced motion.
+
+- **Sticky notes beside open issues.** With issues open, the pad waits
+  as a bubble above them instead of sitting dimmed underneath: hover to
+  peek, click to keep it in front, Escape or the layers button to send it
+  back.
+
+### Changed
+
+- Dragging a card only drops into tracking columns, and the dragged card
+  now follows the pointer across the whole board instead of being clipped
+  to its own column. Moving an issue into a filter column (adding its
+  label, or closing it) is done from the card's menu.
+
 ### Fixed
 
 - Searching a board with a very large column froze the page: every

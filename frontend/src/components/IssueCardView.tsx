@@ -22,6 +22,11 @@ export function IssueCardView({
   onOpen,
   onMove,
   onCloseIssue,
+  onTrack,
+  onUntrack,
+  trackingColumns = [],
+  inTrackingColumn = false,
+  canManage = false,
   draggable = true,
   canWrite = true,
   writeBlockReason = null,
@@ -34,6 +39,14 @@ export function IssueCardView({
   onOpen: (issueNumber: number) => void;
   onMove: (issueNumber: number, targetColumnId: number) => void;
   onCloseIssue: (issueNumber: number) => void;
+  onTrack?: (issueNumber: number, columnId: number, fromColumnId?: number) => void;
+  onUntrack?: (issueNumber: number, columnId: number) => void;
+  /** Tracking columns it could be added to, besides its own. */
+  trackingColumns?: Column[];
+  /** Sitting in a tracking column, so it can be taken out of it. */
+  inTrackingColumn?: boolean;
+  canManage?: boolean;
+  /** Draggable into tracking columns. */
   draggable?: boolean;
   /** Moving and closing change GitHub; hidden where you can't. */
   canWrite?: boolean;
@@ -47,7 +60,10 @@ export function IssueCardView({
   const latestNote = notes[notes.length - 1];
   const cardRef = useRef<HTMLElement | null>(null);
   const canClose = canWrite && issue.state === "open";
-  const movableTo = canWrite ? otherColumns : [];
+  // "Move to" changes the issue on GitHub, which only filter columns mean.
+  const movableTo = canWrite ? otherColumns.filter((c) => c.kind !== "tracking") : [];
+  const canUntrack = inTrackingColumn && canManage && typeof columnId === "number";
+  const hasMenu = movableTo.length > 0 || canClose || trackingColumns.length > 0 || canUntrack;
   const subRef = useRef<HTMLButtonElement | null>(null);
   // The comments panel hangs off the card, not the badge, so it sits beside
   // the whole issue.
@@ -118,22 +134,15 @@ export function IssueCardView({
     }
   }
 
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `issue-${issue.number}`,
-    data: { type: "issue", issueNumber: issue.number, sourceColumnId: columnId },
-    disabled: !draggable || !canWrite,
+  // Per column: the same issue can sit in several at once, and dnd-kit
+  // needs every draggable's id to be unique. What moves on screen is a copy
+  // in the board's drag layer, which can leave the column's scroll box;
+  // this card stays put, faded, until the drop.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `issue-${columnId}-${issue.number}`,
+    data: { type: "issue", issueNumber: issue.number, sourceColumnId: columnId, issue },
+    disabled: !draggable,
   });
-
-  // As motion values rather than a transform string, so the drag offset
-  // composes with the card's own enter and exit animations instead of
-  // being overwritten by them.
-  const style = {
-    x: transform?.x ?? 0,
-    y: transform?.y ?? 0,
-    rotate: transform ? 2 : 0,
-    zIndex: isDragging ? 30 : undefined,
-    boxShadow: isDragging ? "var(--shadow-lg)" : undefined,
-  };
 
   return (
     <motion.article
@@ -143,7 +152,9 @@ export function IssueCardView({
       // cards below slide up instead of jumping. Already-present cards
       // don't animate on load: the column's AnimatePresence skips them.
       initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
+      // Faded while its copy is being dragged; through motion, since an
+      // inline opacity from here would beat any stylesheet rule.
+      animate={{ opacity: isDragging ? 0.35 : 1, scale: 1 }}
       exit={{
         opacity: 0,
         scale: 0.96,
@@ -163,13 +174,12 @@ export function IssueCardView({
         setNodeRef(node);
         cardRef.current = node;
       }}
-      style={style}
       // Only apply dnd-kit's ARIA/listener bundle when the card really is
       // draggable. Otherwise a non-draggable card (the Closed section)
       // gets aria-disabled="true" and is announced as disabled, even
       // though clicking it to open the issue works fine.
-      {...(draggable && canWrite ? attributes : {})}
-      {...(draggable && canWrite ? listeners : {})}
+      {...(draggable ? attributes : {})}
+      {...(draggable ? listeners : {})}
       className="card"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -220,7 +230,7 @@ export function IssueCardView({
         </div>
       )}
 
-      {(movableTo.length > 0 || canClose) && (
+      {hasMenu && (
         <>
           <button
             className="card-menu-btn"
@@ -258,9 +268,41 @@ export function IssueCardView({
                 </>
               )}
 
-              {canClose && (
+              {(trackingColumns.length > 0 || canUntrack) && (
                 <>
                   {movableTo.length > 0 && <div className="menu-divider" />}
+                  {trackingColumns.length > 0 && (
+                    <div className="move-menu-label">{inTrackingColumn ? "Move into" : "Track in"}</div>
+                  )}
+                  {trackingColumns.map((c) => (
+                    <button
+                      key={c.id}
+                      role="menuitem"
+                      onClick={() => {
+                        onTrack?.(issue.number, c.id, inTrackingColumn ? (columnId as number) : undefined);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                  {canUntrack && (
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        onUntrack?.(issue.number, columnId as number);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      Stop tracking here
+                    </button>
+                  )}
+                </>
+              )}
+
+              {canClose && (
+                <>
+                  {(movableTo.length > 0 || trackingColumns.length > 0 || canUntrack) && <div className="menu-divider" />}
                   {/* Two-step rather than a native dialog: this closes a real
                       issue on GitHub, and the menu is easy to mis-click. */}
                   {confirmClose ? (
