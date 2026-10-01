@@ -31,6 +31,27 @@ import {
   IconEye,
 } from "../components/Icons";
 
+/** The search box keeps what's typed to itself and hands the board the
+ * query only once typing pauses: every pass over the board re-renders its
+ * cards, too slow to repeat for each keystroke. */
+export function BoardSearch({ onQuery }: { onQuery: (query: string) => void }) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    if (!value) return onQuery("");
+    const timer = setTimeout(() => onQuery(value), 200);
+    return () => clearTimeout(timer);
+  }, [value, onQuery]);
+  return (
+    <input
+      type="search"
+      placeholder="Search issues…"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      aria-label="Search issues on this board"
+    />
+  );
+}
+
 export function DashboardBoardPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -100,7 +121,8 @@ export function DashboardBoardPage() {
   // that is otherwise working.
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  // Set by BoardSearch once typing pauses.
+  const [query, setQuery] = useState("");
   // Dismissal sticks per board — the warning matters, but not every visit.
   const noticeKey = `devnotepad-notice-dismissed-${dashboardId}`;
   const [noticeOpen, setNoticeOpen] = useState(() => {
@@ -424,13 +446,7 @@ export function DashboardBoardPage() {
           <div className="head-actions">
             <div className="search-pill">
               <IconSearch />
-              <input
-                type="search"
-                placeholder="Search issues…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                aria-label="Search issues on this board"
-              />
+              <BoardSearch onQuery={setQuery} />
             </div>
             {dashboard.token_info && <TokenBadge info={dashboard.token_info} />}
             <button className="icon-btn" onClick={handleRefresh} title="Refresh" aria-label="Refresh">
@@ -555,7 +571,7 @@ export function DashboardBoardPage() {
                 column={column}
                 dashboardId={dashboardId}
                 issues={issuesByColumn[column.id]?.filter(
-                  (i) => matchesSearch(i, search) && !justClosed.has(i.number)
+                  (i) => matchesSearch(i, query) && !justClosed.has(i.number)
                 )}
                 allColumns={columns}
                 notesByIssue={notesByIssue}
@@ -595,7 +611,7 @@ export function DashboardBoardPage() {
         <StickyColumn dashboardId={dashboardId} />
 
         <ClosedSection
-          issues={closedIssues.filter((i) => matchesSearch(i, search))}
+          issues={closedIssues.filter((i) => matchesSearch(i, query))}
           dashboardId={dashboardId}
           notesByIssue={notesByIssue}
           days={closedDays}

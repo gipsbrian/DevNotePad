@@ -5,6 +5,11 @@ import { IssueCardView } from "./IssueCardView";
 import { copyText, formatIssuesForCopy } from "../utils/clipboard";
 import { IconChevronLeft, IconChevronRight, IconDots, IconRefresh } from "./Icons";
 
+/** Cards drawn at a time; scrolling near the end draws the next batch. A
+ * column matching a thousand issues would otherwise draw a thousand cards
+ * on every re-render, freezing the page. */
+const BATCH = 60;
+
 function filterChips(column: Column): string[] {
   const chips: string[] = [];
   if (column.state && column.state !== "open") chips.push(column.state);
@@ -106,6 +111,23 @@ export function ColumnView({
 
   const chips = filterChips(column);
 
+  const [limit, setLimit] = useState(BATCH);
+  const drawn = issues?.slice(0, limit);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const hasMore = (issues?.length ?? 0) > limit;
+
+  useEffect(() => {
+    const more = moreRef.current;
+    if (!hasMore || !more || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => entries[0].isIntersecting && setLimit((l) => l + BATCH),
+      { root: bodyRef.current, rootMargin: "300px" }
+    );
+    observer.observe(more);
+    return () => observer.disconnect();
+  }, [hasMore, limit]);
+
   return (
     <section className={`column${isOver && column.drag_compatible ? " is-over" : ""}`}>
       <header className="column-header">
@@ -199,9 +221,15 @@ export function ColumnView({
         </div>
       )}
 
-      <div className="column-body" ref={setDropRef}>
+      <div
+        className="column-body"
+        ref={(node) => {
+          setDropRef(node);
+          bodyRef.current = node;
+        }}
+      >
         {loading && [0, 1].map((i) => <div key={i} className="skeleton card-skeleton" />)}
-        {issues?.map((issue) => (
+        {drawn?.map((issue) => (
           <IssueCardView
             key={issue.number}
             issue={issue}
@@ -216,6 +244,13 @@ export function ColumnView({
             writeBlockReason={writeBlockReason}
           />
         ))}
+        {hasMore && (
+          // Drawn on reaching it; a button too, for keyboards and for a
+          // browser without IntersectionObserver.
+          <button ref={moreRef} className="column-more" onClick={() => setLimit((l) => l + BATCH)}>
+            Showing {limit} of {issues?.length} · more as you scroll
+          </button>
+        )}
         {!loading && issues?.length === 0 && <div className="column-empty">Nothing here right now.</div>}
       </div>
     </section>

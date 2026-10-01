@@ -302,7 +302,12 @@ repo's whole closed history takes many seconds and delays the board.
 
 The search box filters cards already loaded on the dashboard (title,
 issue number, summary text, and label names) — it doesn't query GitHub
-again, so it's instant but only searches what's currently on the board.
+again, so it only searches what's currently on the board. The board
+updates once you pause typing rather than on every letter.
+
+A column with many issues draws them 60 at a time, adding more as you
+scroll toward its end; its count still shows the full total, and copying
+its issues copies all of them.
 
 ## Theme and appearance
 

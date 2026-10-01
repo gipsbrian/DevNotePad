@@ -10,6 +10,10 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ### Fixed
 
+- Searching a board with a very large column froze the page: every
+  keystroke re-filtered and redrew every card (over a thousand for a
+  column matching all open issues). The board now filters once typing
+  pauses, and a long column draws its cards 60 at a time as you scroll.
 - The backend test suite no longer picks up `SESSION_HTTPS_ONLY` from a
   developer's `.env`; a Secure session cookie was dropped by the test
   client, so every signed-in test failed on an HTTPS deployment's machine.
