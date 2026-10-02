@@ -312,13 +312,33 @@ a {
 }
 
 .search-pill input {
+  /* Safari draws type="search" as its own grey rounded field unless told
+     not to, which shows up as a box inside the pill. */
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
+  border-radius: 0;
   background: none;
   outline: none;
+  box-shadow: none;
   padding: 0;
+  flex: 1;
+  min-width: 0;
   width: 190px;
+  height: 100%;
   font-size: 13.5px;
   color: var(--text);
+}
+
+/* The pill shows focus itself; the input's own ring (from the general
+   input:focus rule below) would draw a second box inside it. */
+.search-pill input:focus {
+  border: none;
+  box-shadow: none;
+}
+
+.search-pill input::-webkit-search-decoration {
+  -webkit-appearance: none;
 }
 
 .search-pill input::placeholder {
