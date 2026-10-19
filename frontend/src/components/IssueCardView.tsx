@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
 import { rememberCardOrigin } from "../utils/cardOrigin";
@@ -13,24 +13,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function IssueCardView({
-  issue,
-  dashboardId,
-  columnId,
-  otherColumns,
-  notesByIssue,
-  onOpen,
-  onMove,
-  onCloseIssue,
-  onTrack,
-  onUntrack,
-  trackingColumns = [],
-  inTrackingColumn = false,
-  canManage = false,
-  draggable = true,
-  canWrite = true,
-  writeBlockReason = null,
-}: {
+type IssueCardProps = {
   issue: IssueCard;
   dashboardId: string;
   columnId: number | "closed";
@@ -51,7 +34,66 @@ export function IssueCardView({
   /** Moving and closing change GitHub; hidden where you can't. */
   canWrite?: boolean;
   writeBlockReason?: string | null;
-}) {
+};
+
+/** What dnd-kit hands the card. Stable for every card but the one being
+ * dragged, so the memoised body below skips re-rendering for the rest. */
+type DragBits = {
+  dragAttributes: ReturnType<typeof useDraggable>["attributes"];
+  dragListeners: ReturnType<typeof useDraggable>["listeners"];
+  setDragNode: (node: HTMLElement | null) => void;
+  isDragging: boolean;
+};
+
+/** A thin draggable shell. dnd-kit re-renders every draggable when a drag
+ * starts or the pointer moves over another column; the card itself is
+ * memoised, so for all but the dragged card that re-render stops here
+ * instead of redrawing every card on the board, which made dragging
+ * choppy. */
+export function IssueCardView(props: IssueCardProps) {
+  const { issue, columnId, draggable = true } = props;
+  // Per column: the same issue can sit in several at once, and dnd-kit
+  // needs every draggable's id to be unique. What moves on screen is a copy
+  // in the board's drag layer, which can leave the column's scroll box;
+  // this card stays put, faded, until the drop.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `issue-${columnId}-${issue.number}`,
+    data: { type: "issue", issueNumber: issue.number, sourceColumnId: columnId, issue },
+    disabled: !draggable,
+  });
+  return (
+    <IssueCardBody
+      {...props}
+      dragAttributes={attributes}
+      dragListeners={listeners}
+      setDragNode={setNodeRef}
+      isDragging={isDragging}
+    />
+  );
+}
+
+const IssueCardBody = memo(function IssueCardBody({
+  issue,
+  dashboardId,
+  columnId,
+  otherColumns,
+  notesByIssue,
+  onOpen,
+  onMove,
+  onCloseIssue,
+  onTrack,
+  onUntrack,
+  trackingColumns = [],
+  inTrackingColumn = false,
+  canManage = false,
+  draggable = true,
+  canWrite = true,
+  writeBlockReason = null,
+  dragAttributes,
+  dragListeners,
+  setDragNode,
+  isDragging,
+}: IssueCardProps & DragBits) {
   const [hovered, setHovered] = useState(false);
   const [noteTapped, setNoteTapped] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -134,16 +176,6 @@ export function IssueCardView({
     }
   }
 
-  // Per column: the same issue can sit in several at once, and dnd-kit
-  // needs every draggable's id to be unique. What moves on screen is a copy
-  // in the board's drag layer, which can leave the column's scroll box;
-  // this card stays put, faded, until the drop.
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `issue-${columnId}-${issue.number}`,
-    data: { type: "issue", issueNumber: issue.number, sourceColumnId: columnId, issue },
-    disabled: !draggable,
-  });
-
   return (
     <motion.article
       layout
@@ -171,15 +203,15 @@ export function IssueCardView({
       // which made every copy after the first render blank.
       layoutId={`card-${columnId}-${issue.number}`}
       ref={(node) => {
-        setNodeRef(node);
+        setDragNode(node);
         cardRef.current = node;
       }}
       // Only apply dnd-kit's ARIA/listener bundle when the card really is
       // draggable. Otherwise a non-draggable card (the Closed section)
       // gets aria-disabled="true" and is announced as disabled, even
       // though clicking it to open the issue works fine.
-      {...(draggable ? attributes : {})}
-      {...(draggable ? listeners : {})}
+      {...(draggable ? dragAttributes : {})}
+      {...(draggable ? dragListeners : {})}
       className="card"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -421,4 +453,4 @@ export function IssueCardView({
       </div>
     </motion.article>
   );
-}
+});

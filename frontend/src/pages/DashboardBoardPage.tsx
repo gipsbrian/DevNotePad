@@ -1,22 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
 import { api } from "../api/client";
 import type { Column, DashboardDetail, IssueCard, Note, RepoMetadata, Settings } from "../types/api";
 import { TokenBadge } from "../components/TokenBadge";
 import { ColumnView } from "../components/ColumnView";
-import { CardGhost } from "../components/CardGhost";
+import { DragLayer, landsIn } from "../components/DragLayer";
 import { ColumnEditorModal, type ColumnFilterPayload } from "../components/ColumnEditorModal";
 import { IssueStack, MAX_OPEN_ISSUES } from "../components/IssueStack";
 import { ClosedSection, CLOSED_RANGES } from "../components/ClosedSection";
@@ -383,24 +374,11 @@ export function DashboardBoardPage() {
     }
   }
 
-  const [dragging, setDragging] = useState<IssueCard | null>(null);
-  // Whether letting go now would land the card. Off, the copy glides back
-  // to where it came from; on, it vanishes as the card appears in place.
-  const [dropLands, setDropLands] = useState(false);
-
-  function landsIn(event: DragOverEvent | DragEndEvent): number | null {
-    const target = event.over?.data.current;
-    const source = event.active.data.current?.sourceColumnId;
-    return target?.tracking && target.columnId !== source ? (target.columnId as number) : null;
-  }
-
-  function handleDragStart(event: DragStartEvent) {
-    setDragging((event.active.data.current?.issue as IssueCard | undefined) ?? null);
-    setDropLands(false);
-  }
+  // Drag state lives in DragLayer: setting it here would re-render the
+  // whole board when a card is picked up.
+  const boardRef = useRef<HTMLDivElement>(null);
 
   function handleDragEnd(event: DragEndEvent) {
-    setDragging(null);
     const target = landsIn(event);
     const issueNumber = event.active.data.current?.issueNumber as number | undefined;
     if (target === null || !issueNumber) return;
@@ -628,14 +606,8 @@ export function DashboardBoardPage() {
           />
         )}
 
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragOver={(e) => setDropLands(landsIn(e) !== null)}
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => setDragging(null)}
-        >
-          <div className="board">
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="board" ref={boardRef}>
             {columns.map((column) => (
               <ColumnView
                 key={column.id}
@@ -678,13 +650,7 @@ export function DashboardBoardPage() {
             )}
 
           </div>
-          {/* In the body, clear of every column's scroll box and transform. */}
-          {createPortal(
-            <DragOverlay dropAnimation={dropLands ? null : undefined}>
-              {dragging && <CardGhost issue={dragging} />}
-            </DragOverlay>,
-            document.body
-          )}
+          <DragLayer boardRef={boardRef} />
         </DndContext>
 
         {/* Floats above the board rather than living in the column

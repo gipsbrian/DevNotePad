@@ -783,23 +783,24 @@ a {
   box-shadow: var(--shadow-md);
 }
 
-/* While a card is dragged: tracking columns invite the drop, filter
-   columns step back, since they can't take one. */
+/* While a card is dragged (DragLayer sets the attributes): tracking
+   columns invite the drop, the rest step back, and the column the card
+   came from stays as it is. */
 .column {
   transition: box-shadow 0.15s ease, outline-color 0.15s ease, opacity 0.2s ease, filter 0.2s ease;
 }
 
-.column.drop-target {
+.board[data-dragging] .column.droppable:not([data-drag-source]) {
   outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-.column.drop-target.is-over {
+.board[data-dragging] .column.droppable.is-over:not([data-drag-source]) {
   outline-style: solid;
   outline-color: var(--accent);
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow-md);
 }
 
-.column.no-drop {
+.board[data-dragging] .column:not(.droppable):not([data-drag-source]) {
   opacity: 0.55;
   filter: saturate(0.6);
 }

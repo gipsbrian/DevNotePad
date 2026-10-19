@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useDndContext, useDroppable } from "@dnd-kit/core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
 import type { Column, IssueCard, Note } from "../types/api";
 import { IssueCardView } from "./IssueCardView";
@@ -86,17 +86,15 @@ export function ColumnView({
     data: { type: "cards", columnId: column.id, tracking },
     disabled: !tracking || !canManage,
   });
-  const { active } = useDndContext();
-  const dragFrom = active?.data.current?.sourceColumnId as number | undefined;
-  const dropState = !active
-    ? ""
-    : tracking && canManage && dragFrom !== column.id
-      ? isOver
-        ? " drop-target is-over"
-        : " drop-target"
-      : dragFrom === column.id
-        ? ""
-        : " no-drop";
+  const droppable = tracking && canManage;
+  // Hover targets re-render this column while a card is dragged; the same
+  // lists each time let its cards skip re-rendering (IssueCardView is
+  // memoised), which kept dragging smooth.
+  const otherColumns = useMemo(() => allColumns.filter((c) => c.id !== column.id), [allColumns, column.id]);
+  const trackingColumns = useMemo(
+    () => (canManage ? allColumns.filter((c) => c.kind === "tracking" && c.id !== column.id) : []),
+    [allColumns, column.id, canManage]
+  );
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -169,7 +167,12 @@ export function ColumnView({
   shown.current = numbers;
 
   return (
-    <section className={`column${tracking ? " tracking" : ""}${dropState}`}>
+    // Whether a drag is under way, and from where, the stylesheet reads off
+    // attributes DragLayer sets, so no column re-renders for it.
+    <section
+      className={`column${tracking ? " tracking" : ""}${droppable ? " droppable" : ""}${isOver && droppable ? " is-over" : ""}`}
+      data-column-id={column.id}
+    >
       <header className="column-header">
         <div className="column-title">
           <span className="column-dot" style={{ background: accentColor }} />
@@ -277,14 +280,14 @@ export function ColumnView({
               issue={issue}
               dashboardId={dashboardId}
               columnId={column.id}
-              otherColumns={allColumns.filter((c) => c.id !== column.id)}
+              otherColumns={otherColumns}
               notesByIssue={notesByIssue}
               onOpen={onOpenIssue}
               onMove={onMoveIssue}
               onCloseIssue={onCloseIssue}
               onTrack={onTrackIssue}
               onUntrack={onUntrackIssue}
-              trackingColumns={canManage ? allColumns.filter((c) => c.kind === "tracking" && c.id !== column.id) : []}
+              trackingColumns={trackingColumns}
               inTrackingColumn={tracking}
               canManage={canManage}
               draggable={canDrag}
