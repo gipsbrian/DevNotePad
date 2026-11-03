@@ -42,3 +42,13 @@ def parse_org_url(value: Optional[str]) -> Optional[str]:
     ref = _CLEAN.sub("", value.strip()).strip("/")
     parts = [p for p in ref.split("/") if p]
     return parts[0] if parts else None
+
+
+_LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+
+
+def parse_org_ref(value: Optional[str]) -> Optional[str]:
+    """A GitHub org from a bare login ('my-org') or a github.com URL. None
+    unless it's a valid login, since it ends up in API paths and queries."""
+    login = parse_org_url(value)
+    return login if login and _LOGIN.match(login) else None

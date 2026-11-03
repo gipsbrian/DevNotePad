@@ -1,8 +1,7 @@
 import { useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { DragOverlay, useDndMonitor, type DragEndEvent, type DragOverEvent } from "@dnd-kit/core";
-import type { IssueCard } from "../types/api";
-import { CardGhost } from "./CardGhost";
+import { CardGhost, type GhostCard } from "./CardGhost";
 
 /** The tracking column a drop would land in, or null: only tracking
  * columns take a drop, and not the one the card came from. */
@@ -21,7 +20,7 @@ export function landsIn(event: DragOverEvent | DragEndEvent): number | null {
  * board, `data-drag-source` on the column the card came from. React
  * doesn't manage either, so a column re-rendering mid-drag keeps them. */
 export function DragLayer({ boardRef }: { boardRef: RefObject<HTMLElement | null> }) {
-  const [dragging, setDragging] = useState<IssueCard | null>(null);
+  const [dragging, setDragging] = useState<GhostCard | null>(null);
   // Off, the copy glides back to where it came from; on, it vanishes as
   // the card appears in its new column.
   const [lands, setLands] = useState(false);
@@ -45,7 +44,7 @@ export function DragLayer({ boardRef }: { boardRef: RefObject<HTMLElement | null
 
   useDndMonitor({
     onDragStart(event) {
-      setDragging((event.active.data.current?.issue as IssueCard | undefined) ?? null);
+      setDragging((event.active.data.current?.issue as GhostCard | undefined) ?? null);
       setLands(false);
       hint((event.active.data.current?.sourceColumnId as number | undefined) ?? null);
     },

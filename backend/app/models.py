@@ -19,8 +19,12 @@ class Dashboard(SQLModel, table=True):
     # key stays internal: it's guessable, so it never leaves the backend.
     uuid: str = Field(default_factory=lambda: str(uuid4()), index=True, unique=True)
     name: str
+    # For a PR board, repo_owner is the GitHub org it covers and repo_name
+    # is empty.
     repo_owner: str
     repo_name: str
+    # "issues": one repo's issues. "pulls": pull requests across an org.
+    subject: str = Field(default="issues", sa_column_kwargs={"server_default": "issues"})
     # Per-dashboard token override. Never returned verbatim over the API
     # once set — only a masked form and its detected type/permission.
     # Encrypted at rest by the column type.
@@ -280,6 +284,21 @@ class TrackedIssue(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     column_id: int = Field(foreign_key="column.id", index=True)
     issue_number: int
+    added_by: Optional[int] = Field(default=None, foreign_key="user.id")
+    added_at: datetime = Field(default_factory=utcnow)
+
+
+class TrackedPull(SQLModel, table=True):
+    """A pull request dropped into a tracking column on a PR board. A PR
+    board spans an org, so the repo is part of what identifies it. Dropped
+    once the PR is merged, closed or gone."""
+
+    __table_args__ = (UniqueConstraint("column_id", "repo", "number"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    column_id: int = Field(foreign_key="column.id", index=True)
+    repo: str  # "owner/name", lowercase
+    number: int
     added_by: Optional[int] = Field(default=None, foreign_key="user.id")
     added_at: datetime = Field(default_factory=utcnow)
 

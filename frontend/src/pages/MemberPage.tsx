@@ -66,7 +66,7 @@ export function MemberPage() {
                 <h3>{d.name}</h3>
                 <div className="tile-repo">
                   <IconRepo />
-                  {d.repo_owner}/{d.repo_name}
+                  {d.subject === "pulls" ? `Pull requests · ${d.repo_owner}` : `${d.repo_owner}/${d.repo_name}`}
                 </div>
               </div>
             </Link>

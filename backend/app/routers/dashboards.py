@@ -9,9 +9,9 @@ from ..access import MANAGE, VIEW, board_access, get_board, read_token, write_bl
 from ..auth import require_user
 from ..db import get_session
 from ..github_client import GitHubClient, GitHubError
-from ..models import BoardShare, Column, Dashboard, LocalNote, Organization, StickyNote, TrackedIssue, User
+from ..models import BoardShare, Column, Dashboard, LocalNote, Organization, StickyNote, TrackedIssue, TrackedPull, User
 from ..orgs import current_organization, membership, switch_to
-from ..repo_ref import parse_repo_ref
+from ..repo_ref import parse_org_ref, parse_repo_ref
 from ..settings_store import get_settings
 from ..schemas import (
     ColumnCreate,
@@ -64,6 +64,9 @@ def _drag_compatible(column: Column) -> bool:
 # (autoincrement) column row.
 VIRTUAL_ASSIGNED_ID = -1
 VIRTUAL_CREATED_ID = -2
+# PR boards: "My open PRs" / "Review requested".
+VIRTUAL_MY_PULLS_ID = -3
+VIRTUAL_REVIEW_ID = -4
 
 
 def _dashboard_out(session: Session, d: Dashboard, user: User) -> DashboardOut:
@@ -80,6 +83,7 @@ def _dashboard_out(session: Session, d: Dashboard, user: User) -> DashboardOut:
         accent_color=d.accent_color,
         background_url=d.background_url,
         kind=d.kind,
+        subject=d.subject,
         access=access,
         owner=owner.username if owner else None,
         shared_with_organization=d.shared_with_organization,
@@ -115,9 +119,20 @@ def _virtual_columns(session: Session, dashboard: Dashboard, user: User, start_p
     the username changes, always sit last, and can't be edited or deleted."""
     app_settings = get_settings(session, user.id)
     username = app_settings.github_username
+    dashboard_uuid = dashboard.uuid
+    if dashboard.subject == "pulls":
+        # They're what a PR board is for, so the "my columns" setting
+        # doesn't hide them. Without a username they can't be built.
+        if not username:
+            return []
+        return [
+            ColumnOut(id=VIRTUAL_MY_PULLS_ID, dashboard_id=dashboard_uuid, name="My open PRs", position=start_position,
+                      state="open", labels=[], milestone=None, assignee=None, creator=username, virtual=True, drag_compatible=False),
+            ColumnOut(id=VIRTUAL_REVIEW_ID, dashboard_id=dashboard_uuid, name="Review requested",
+                      position=start_position + 1, state="open", labels=[], milestone=None, assignee=username, virtual=True, drag_compatible=False),
+        ]
     if not username or not app_settings.show_my_columns:
         return []
-    dashboard_uuid = dashboard.uuid
 
     return [
         ColumnOut(
@@ -160,7 +175,7 @@ def _get_column_or_404(session: Session, dashboard_pk: int, column_id: int) -> C
 
 def _column_spec(session: Session, dashboard: Dashboard, user: User, column_id: int) -> ColumnOut:
     """The filter to query GitHub with, for a real *or* virtual column."""
-    if column_id in (VIRTUAL_ASSIGNED_ID, VIRTUAL_CREATED_ID):
+    if column_id < 0:
         for virtual in _virtual_columns(session, dashboard, user, start_position=0):
             if virtual.id == column_id:
                 return virtual
@@ -182,6 +197,13 @@ def _resolve_repo(payload_ref: Optional[str], owner: Optional[str], name: Option
     raise HTTPException(422, "A repo is required — pass repo_ref, or repo_owner and repo_name.")
 
 
+def _resolve_org(ref: Optional[str]) -> str:
+    org = parse_org_ref(ref)
+    if not org:
+        raise HTTPException(422, "A PR board needs a GitHub organisation, e.g. 'my-org' or https://github.com/my-org.")
+    return org
+
+
 @router.post("", response_model=DashboardOut)
 def create_dashboard(
     payload: DashboardCreate, request: Request, session: Session = Depends(get_session), user: User = Depends(require_user)
@@ -191,7 +213,10 @@ def create_dashboard(
         raise HTTPException(422, "A board is either 'personal' or 'organization'.")
     if payload.kind == "organization" and membership(session, organization.id, user.id).role != "admin":
         raise HTTPException(403, "Only this organization's admins can create organization boards.")
-    repo_owner, repo_name = _resolve_repo(payload.repo_ref, payload.repo_owner, payload.repo_name)
+    if payload.subject == "pulls":
+        repo_owner, repo_name = _resolve_org(payload.org_ref), ""
+    else:
+        repo_owner, repo_name = _resolve_repo(payload.repo_ref, payload.repo_owner, payload.repo_name)
     dashboard = Dashboard(
         name=payload.name,
         repo_owner=repo_owner,
@@ -199,6 +224,7 @@ def create_dashboard(
         owner_id=user.id,
         organization_id=organization.id,
         kind=payload.kind,
+        subject=payload.subject,
         token=payload.token,
         accent_color=payload.accent_color,
         background_url=payload.background_url,
@@ -217,8 +243,11 @@ def update_dashboard(
     if payload.name is not None and payload.name.strip():
         dashboard.name = payload.name.strip()
     if payload.repo_ref is not None:
-        owner, name = _resolve_repo(payload.repo_ref, None, None)
-        dashboard.repo_owner, dashboard.repo_name = owner, name
+        if dashboard.subject == "pulls":
+            dashboard.repo_owner = _resolve_org(payload.repo_ref)
+        else:
+            owner, name = _resolve_repo(payload.repo_ref, None, None)
+            dashboard.repo_owner, dashboard.repo_name = owner, name
     if payload.token is not None:
         # Empty string means "fall back to the general token".
         dashboard.token = payload.token.strip() or None
@@ -272,7 +301,11 @@ async def get_dashboard(
     if board_access(session, dashboard, user) == MANAGE:
         client = GitHubClient(read_token(session, dashboard))
         try:
-            info: TokenInfo = await client.get_token_info(dashboard.repo_owner, dashboard.repo_name)
+            info: TokenInfo = (
+                await client.get_org_token_info(dashboard.repo_owner)
+                if dashboard.subject == "pulls"
+                else await client.get_token_info(dashboard.repo_owner, dashboard.repo_name)
+            )
         finally:
             await client.aclose()
         token_info = info.__dict__ | {"warning": info.warning}
@@ -406,6 +439,8 @@ def create_column(dashboard_uuid: str, payload: ColumnCreate, session: Session =
         position = max((c.position for c in existing), default=-1) + 1
     else:
         position = payload.position
+    if dashboard.subject == "pulls" and payload.kind != "tracking":
+        raise HTTPException(422, "A PR board's own columns are tracking columns.")
     if payload.kind == "tracking":
         # Holds whatever is dropped into it, so there's nothing to filter on.
         column = Column(dashboard_id=dashboard.id, name=payload.name, kind="tracking", state="open", position=position)
@@ -478,6 +513,8 @@ def update_column(
 ):
     dashboard = get_board(session, dashboard_uuid, user, MANAGE)
     column = _get_column_or_404(session, dashboard.id, column_id)
+    if dashboard.subject == "pulls" and payload.kind == "filter":
+        raise HTTPException(422, "A PR board's own columns are tracking columns.")
     if payload.name is not None:
         column.name = payload.name
     if payload.position is not None:
@@ -535,6 +572,8 @@ def _forget_tracked(session: Session, column: Column) -> None:
     # SQLite can reuse a deleted column's id, which would hand its tracked
     # issues to the next column created.
     for row in session.exec(select(TrackedIssue).where(TrackedIssue.column_id == column.id)):
+        session.delete(row)
+    for row in session.exec(select(TrackedPull).where(TrackedPull.column_id == column.id)):
         session.delete(row)
 
 

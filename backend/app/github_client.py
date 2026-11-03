@@ -178,6 +178,48 @@ class GitHubClient:
         self._raise_for_status(resp)
         return resp.json()
 
+    async def search_all(self, query: str, limit: int = 300) -> list[dict]:
+        """Every result of a search, up to `limit`, newest-updated first.
+        A page costs one of search's 30 requests a minute, hence the cap."""
+        items: list[dict] = []
+        page = 1
+        while len(items) < limit:
+            resp = await self._get(
+                "/search/issues", params={"q": query, "sort": "updated", "per_page": 100, "page": page}
+            )
+            self._raise_for_status(resp)
+            batch = resp.json().get("items", [])
+            items.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        return items[:limit]
+
+    async def get_org_token_info(self, org: str) -> TokenInfo:
+        """get_token_info for a board that covers an org rather than a repo."""
+        token_type = detect_token_type(self.token)
+        info = TokenInfo(token_type=token_type, type_label=token_type_label(token_type))
+        if token_type == "none":
+            info.error = "No token configured for this dashboard."
+            return info
+        try:
+            resp = await self._get(f"/orgs/{org}")
+        except httpx.HTTPError as exc:
+            info.error = f"Could not reach GitHub: {exc}"
+            return info
+        if resp.status_code == 401:
+            info.error = "Token is invalid or revoked."
+        elif resp.status_code == 404:
+            info.error = "GitHub organisation not found, or the token can't see it."
+        elif resp.status_code >= 400:
+            info.error = resp.text
+        else:
+            if token_type == "classic-pat":
+                scopes = resp.headers.get("X-OAuth-Scopes", "")
+                info.classic_scopes = [s.strip() for s in scopes.split(",") if s.strip()]
+            info.inferred_can_read = True
+        return info
+
     async def list_org_members(self, org: str) -> list[dict]:
         """Team members for the insights picker. Needs org read; returns
         [] rather than raising when the token can't see them."""

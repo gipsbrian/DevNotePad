@@ -28,7 +28,9 @@ export function CustomizePanel({
   onClose: () => void;
 }) {
   const [name, setName] = useState(dashboard.name);
-  const [repoRef, setRepoRef] = useState(`${dashboard.repo_owner}/${dashboard.repo_name}`);
+  // A PR board covers a whole org, so its "repo" is just the org.
+  const currentRef = dashboard.subject === "pulls" ? dashboard.repo_owner : `${dashboard.repo_owner}/${dashboard.repo_name}`;
+  const [repoRef, setRepoRef] = useState(currentRef);
   const [useOwnToken, setUseOwnToken] = useState(dashboard.has_own_token);
   const [token, setToken] = useState("");
   const [accentColor, setAccentColor] = useState(dashboard.accent_color ?? PRESET_COLORS[0]);
@@ -42,7 +44,7 @@ export function CustomizePanel({
     try {
       const details: { name?: string; repo_ref?: string; token?: string } = {};
       if (name !== dashboard.name) details.name = name;
-      if (repoRef !== `${dashboard.repo_owner}/${dashboard.repo_name}`) details.repo_ref = repoRef;
+      if (repoRef !== currentRef) details.repo_ref = repoRef;
       if (!useOwnToken && dashboard.has_own_token) details.token = ""; // fall back to the general one
       if (useOwnToken && token) details.token = token;
 
@@ -73,7 +75,7 @@ export function CustomizePanel({
       </div>
 
       <div className="form-row">
-        <label>Repository</label>
+        <label>{dashboard.subject === "pulls" ? "GitHub organisation" : "Repository"}</label>
         <input
           value={repoRef}
           onChange={(e) => setRepoRef(e.target.value)}

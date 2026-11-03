@@ -198,6 +198,8 @@ or individually: `make test-backend` / `make test-frontend`.
 - Cards carry labels, assignees, age, comment and sub-issue counts.
 - Tracking columns: drag in the issues you want to keep an eye on,
   whatever their labels. Closed ones drop out by themselves.
+- PR boards: your open pull requests and review requests across a GitHub
+  org, per viewer, plus tracking columns for the PRs you follow.
 - Move an issue between compatible filter columns from its card's menu.
 - Close an issue, comment on it, or read its comments without leaving the
   board.

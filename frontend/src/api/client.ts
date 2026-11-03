@@ -18,6 +18,7 @@ import type {
   IssueCard,
   IssueDetail,
   Note,
+  PullCard,
   RepoMetadata,
   Insights,
   Member,
@@ -168,7 +169,9 @@ export const api = {
   getDashboard: (id: string) => request<DashboardDetail>(`/api/dashboards/${id}`),
   createDashboard: (payload: {
     name: string;
-    repo_ref: string;
+    repo_ref?: string;
+    subject?: Dashboard["subject"];
+    org_ref?: string;
     token?: string;
     accent_color?: string;
     background_url?: string;
@@ -238,6 +241,17 @@ export const api = {
     request<IssueCard>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked`, {
       method: "POST",
       body: JSON.stringify({ issue_number: number, from_column_id: fromColumnId ?? null }),
+    }),
+  listColumnPulls: (dashboardId: string, columnId: number) =>
+    request<PullCard[]>(`/api/dashboards/${dashboardId}/columns/${columnId}/pulls`),
+  trackPull: (dashboardId: string, columnId: number, repo: string, number: number, fromColumnId?: number) =>
+    request<PullCard>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked-pulls`, {
+      method: "POST",
+      body: JSON.stringify({ repo, number, from_column_id: fromColumnId ?? null }),
+    }),
+  untrackPull: (dashboardId: string, columnId: number, repo: string, number: number) =>
+    request<void>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked-pulls/${repo}/${number}`, {
+      method: "DELETE",
     }),
   untrackIssue: (dashboardId: string, columnId: number, number: number) =>
     request<void>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked/${number}`, { method: "DELETE" }),

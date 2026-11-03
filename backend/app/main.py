@@ -21,6 +21,7 @@ from .routers import (
     notes,
     notifications,
     orgs,
+    pulls,
     settings as settings_router,
     sticky,
 )
@@ -66,6 +67,7 @@ app.include_router(sso.router)
 # so all of it sits behind a session.
 _authenticated = [Depends(require_user)]
 app.include_router(dashboards.router, dependencies=_authenticated)
+app.include_router(pulls.router, dependencies=_authenticated)
 app.include_router(notes.router, dependencies=_authenticated)
 app.include_router(settings_router.router, dependencies=_authenticated)
 app.include_router(insights.router, dependencies=_authenticated)

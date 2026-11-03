@@ -19,6 +19,9 @@ export function CreateDashboardPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [name, setName] = useState("");
   const [repoRef, setRepoRef] = useState("");
+  const [subject, setSubject] = useState<Dashboard["subject"]>("issues");
+  const pulls = subject === "pulls";
+  const [orgRef, setOrgRef] = useState("");
   const { active } = useOrganizations();
   const isAdmin = active?.role === "admin";
   const [kind, setKind] = useState<Dashboard["kind"]>("personal");
@@ -37,6 +40,7 @@ export function CreateDashboardPage() {
     api.getSettings().then((s) => {
       setSettings(s);
       setRepoRef((current) => current || orgPrefix(s.default_org_url));
+      setOrgRef((current) => current || orgPrefix(s.default_org_url).replace(/\/$/, ""));
       // Without a general token there's nothing to fall back on, so the
       // board has to carry its own.
       if (!s.has_default_token) setUseOwnToken(true);
@@ -50,7 +54,7 @@ export function CreateDashboardPage() {
     try {
       const dashboard = await api.createDashboard({
         name,
-        repo_ref: repoRef,
+        ...(pulls ? { subject, org_ref: orgRef } : { repo_ref: repoRef }),
         token: useOwnToken && token ? token : undefined,
         kind,
         accent_color: accentColor,
@@ -68,7 +72,11 @@ export function CreateDashboardPage() {
       <header className="page-head">
         <div>
           <h1 className="page-title">New board</h1>
-          <p className="page-sub">Point it at one repo — columns come next, built from that repo’s own labels.</p>
+          <p className="page-sub">
+            {pulls
+              ? "Pull requests across a GitHub organisation: yours, the ones waiting on your review, and any you track."
+              : "Point it at one repo — columns come next, built from that repo’s own labels."}
+          </p>
         </div>
       </header>
 
@@ -80,19 +88,50 @@ export function CreateDashboardPage() {
           </div>
 
           <div className="form-row">
-            <label>Repository</label>
-            <input
-              value={repoRef}
-              onChange={(e) => setRepoRef(e.target.value)}
-              required
-              placeholder="owner/repo or https://github.com/owner/repo"
-            />
-            <p className="empty-hint" style={{ marginTop: 6 }}>
-              {settings?.default_org_url
-                ? `Prefilled from your default org (${settings.default_org_url}). Paste a full URL to use a different one.`
-                : "Paste a GitHub URL or type owner/repo."}
-            </p>
+            <label>What it shows</label>
+            <div className="kind-choice">
+              <label className={!pulls ? "on" : ""}>
+                <input type="radio" name="subject" checked={!pulls} onChange={() => setSubject("issues")} />
+                <span>
+                  <strong>Issues</strong>
+                  <small>One repo’s issues, in columns you filter.</small>
+                </span>
+              </label>
+              <label className={pulls ? "on" : ""}>
+                <input type="radio" name="subject" checked={pulls} onChange={() => setSubject("pulls")} />
+                <span>
+                  <strong>Pull requests</strong>
+                  <small>Your open PRs and review requests across an org.</small>
+                </span>
+              </label>
+            </div>
           </div>
+
+          {pulls ? (
+            <div className="form-row">
+              <label>GitHub organisation</label>
+              <input value={orgRef} onChange={(e) => setOrgRef(e.target.value)} required placeholder="my-org or https://github.com/my-org" />
+              <p className="empty-hint" style={{ marginTop: 6 }}>
+                Each person sees their own PRs here, from the GitHub username in their settings
+                {settings && !settings.github_username ? " (yours isn’t set yet)" : ""}.
+              </p>
+            </div>
+          ) : (
+            <div className="form-row">
+              <label>Repository</label>
+              <input
+                value={repoRef}
+                onChange={(e) => setRepoRef(e.target.value)}
+                required
+                placeholder="owner/repo or https://github.com/owner/repo"
+              />
+              <p className="empty-hint" style={{ marginTop: 6 }}>
+                {settings?.default_org_url
+                  ? `Prefilled from your default org (${settings.default_org_url}). Paste a full URL to use a different one.`
+                  : "Paste a GitHub URL or type owner/repo."}
+              </p>
+            </div>
+          )}
 
           {isAdmin && (
             <div className="form-row">
@@ -168,9 +207,18 @@ export function CreateDashboardPage() {
             <div className="notice">
               <IconAlert />
               <span>
-                No general token is configured, so this board needs its own. Scope it to just this repo with{" "}
-                <strong>Issues: Read-only</strong> (or Read &amp; write to close issues and post comments). You can set a
-                general token once in <Link to="/">Settings</Link> instead.
+                {pulls ? (
+                  <>
+                    No general token is configured, so this board needs its own. It needs read access to the org’s
+                    repos, with <strong>Pull requests: Read-only</strong>.
+                  </>
+                ) : (
+                  <>
+                    No general token is configured, so this board needs its own. Scope it to just this repo with{" "}
+                    <strong>Issues: Read-only</strong> (or Read &amp; write to close issues and post comments).
+                  </>
+                )}{" "}
+                You can set a general token once in <Link to="/">Settings</Link> instead.
               </span>
             </div>
           )}

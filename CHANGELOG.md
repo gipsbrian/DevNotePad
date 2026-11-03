@@ -10,6 +10,11 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ### Added
 
+- **PR boards.** A board over a whole GitHub organisation's pull
+  requests. Two automatic columns follow whoever is looking, "My open
+  PRs" and "Review requested", from the GitHub username in their
+  settings; the board's own columns are tracking columns that PRs are
+  dragged into, and merged or closed PRs drop out by themselves.
 - **Tracking columns.** A column type with no filter: it holds exactly
   the issues dragged into it, whatever their labels, and closed, deleted
   or transferred issues drop out by themselves. Dragging between two

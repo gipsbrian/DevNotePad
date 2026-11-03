@@ -95,6 +95,10 @@ class DashboardCreate(BaseModel):
     background_url: Optional[str] = None
     # "personal" (yours) or "organization" (admins only; every member sees it)
     kind: str = "personal"
+    # "pulls": a PR board over a whole GitHub org, named by org_ref (a login
+    # or a github.com URL) instead of a repo.
+    subject: Literal["issues", "pulls"] = "issues"
+    org_ref: Optional[str] = None
 
 
 class DashboardUpdate(BaseModel):
@@ -129,6 +133,7 @@ class DashboardOut(BaseModel):
     accent_color: Optional[str] = None
     background_url: Optional[str] = None
     kind: str = "personal"
+    subject: str = "issues"
     # What the caller may do: "view" or "manage".
     access: str = "manage"
     owner: Optional[str] = None
@@ -300,6 +305,29 @@ class IssueCardOut(BaseModel):
     # From `sub_issues_summary` on the issue payload — free, no extra call.
     sub_issues_total: int = 0
     sub_issues_completed: int = 0
+
+
+class PullCardOut(BaseModel):
+    """A pull request on a PR board. `repo` is "owner/name": numbers only
+    identify a PR within its repo."""
+
+    repo: str
+    number: int
+    title: str
+    html_url: str
+    author: Optional[AssigneeOut] = None
+    draft: bool = False
+    labels: List[LabelOut]
+    created_at: datetime
+    updated_at: datetime
+    comments_count: int
+    age_days: int
+
+
+class TrackPullRequest(BaseModel):
+    repo: str
+    number: int
+    from_column_id: Optional[int] = None
 
 
 class IssueDetailOut(BaseModel):

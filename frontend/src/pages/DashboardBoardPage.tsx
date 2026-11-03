@@ -37,7 +37,7 @@ import {
 /** The search box keeps what's typed to itself and hands the board the
  * query only once typing pauses: every pass over the board re-renders its
  * cards, too slow to repeat for each keystroke. */
-export function BoardSearch({ onQuery }: { onQuery: (query: string) => void }) {
+export function BoardSearch({ onQuery, label = "issues" }: { onQuery: (query: string) => void; label?: string }) {
   const [value, setValue] = useState("");
   useEffect(() => {
     if (!value) return onQuery("");
@@ -47,15 +47,16 @@ export function BoardSearch({ onQuery }: { onQuery: (query: string) => void }) {
   return (
     <input
       type="search"
-      placeholder="Search issues…"
+      placeholder={`Search ${label}…`}
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      aria-label="Search issues on this board"
+      aria-label={`Search ${label} on this board`}
     />
   );
 }
 
-export function DashboardBoardPage() {
+/** `switchedTo` names the organisation that opening this board moved you into. */
+export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedTo?: string | null } = {}) {
   const { id } = useParams();
   const navigate = useNavigate();
   const dashboardId = id!;
@@ -101,7 +102,7 @@ export function DashboardBoardPage() {
   const [dashboard, setDashboard] = useState<DashboardDetail | null>(null);
   const { reload: reloadOrganizations } = useOrganizations();
   // Set when opening this board moved you into its organisation.
-  const [switchedTo, setSwitchedTo] = useState<string | null>(null);
+  const [switchedTo, setSwitchedTo] = useState<string | null>(arrivedIn);
   const [columns, setColumns] = useState<Column[]>([]);
   const [issuesByColumn, setIssuesByColumn] = useState<Record<number, IssueCard[]>>({});
   const [closedIssues, setClosedIssues] = useState<IssueCard[]>([]);

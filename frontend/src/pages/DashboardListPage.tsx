@@ -195,7 +195,7 @@ function BoardTile({ board: d, onDelete }: { board: Dashboard; onDelete: (e: Rea
         <h3>{d.name}</h3>
         <div className="tile-repo">
           <IconRepo />
-          {d.repo_owner}/{d.repo_name}
+          {d.subject === "pulls" ? `Pull requests · ${d.repo_owner}` : `${d.repo_owner}/${d.repo_name}`}
         </div>
         {d.access === "view" && d.kind === "personal" && d.owner && <div className="tile-owner">by {d.owner}</div>}
       </div>

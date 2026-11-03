@@ -1738,6 +1738,16 @@ a {
   color: var(--accent);
 }
 
+.add-column-form {
+  cursor: default;
+  padding: 14px;
+  gap: 8px;
+}
+
+.add-column-form input {
+  width: 100%;
+}
+
 /* ---------------- Cards ---------------- */
 
 .card {
@@ -1773,6 +1783,24 @@ a {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-subtle);
+}
+
+/* PR boards: which repo a PR is in, and whether it's a draft. */
+.pull-repo {
+  color: var(--text-muted);
+}
+
+.pull-draft {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.pull-card.draft .card-title {
+  color: var(--text-muted);
 }
 
 .card-title {

@@ -227,6 +227,25 @@ directly on GitHub instead.
   when the column loads, so a long one costs more of the token's rate
   limit than a filter column does.
 
+## PR boards
+
+A PR board follows pull requests across a whole GitHub organisation
+instead of one repo's issues. Make one from **New dashboard** by choosing
+**Pull requests** and naming the org (`my-org` or its github.com URL).
+
+- **My open PRs** and **Review requested** are automatic columns. Each
+  person sees their own, built from the GitHub username in their settings,
+  so on a shared or organisation board everyone sees what's on their plate.
+  Without a username set, the board says so and these columns stay away.
+- **Your own columns are tracking columns.** Drag a PR into one to keep an
+  eye on it, or use its card's `...` menu, exactly as on an issue board.
+  Merged, closed and deleted PRs drop out by themselves.
+- **Click a card** to open the PR on GitHub. A PR board only reads from
+  GitHub; nothing on it writes there.
+- The board's token needs read access to the org's repos (for a
+  fine-grained token, **Pull requests: Read-only**). The automatic columns
+  use GitHub search, which allows 30 requests a minute per token.
+
 ## Working with cards
 
 - **Card face**: title, a stripped-markdown summary, full labels, opened
