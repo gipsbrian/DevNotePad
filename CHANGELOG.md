@@ -17,6 +17,10 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ### Added
 
+- **New issues from the board.** An issue board's **New issue** button
+  opens an issue on GitHub in the board's repo, with labels, assignees,
+  milestone and type picked from what the repo already has. It's made with
+  your own token, so GitHub records you as the author.
 - **Merged and closed PRs.** A PR board now has a section below its
   columns, like an issue board's Closed section: the pull requests you
   wrote or reviewed that were merged or closed, grouped by day, with the

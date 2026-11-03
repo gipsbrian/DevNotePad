@@ -25,6 +25,7 @@ from ..schemas import (
     DashboardOut,
     IssueCardOut,
     IssueDetailOut,
+    IssueCreate,
     BoardSharingOut,
     BoardSharingUpdate,
     CommentCreate,
@@ -828,6 +829,39 @@ async def list_issue_sub_issues(
         SubIssueOut(number=si["number"], title=si["title"], state=si["state"], html_url=si["html_url"])
         for si in sub_issues
     ]
+
+
+@router.post("/{dashboard_uuid}/issues", response_model=IssueCardOut, status_code=201)
+async def create_issue(
+    dashboard_uuid: str, payload: IssueCreate, session: Session = Depends(get_session), user: User = Depends(require_user)
+):
+    """Opens an issue in the board's repo, made with the caller's own token
+    so GitHub records them as its author."""
+    dashboard = get_board(session, dashboard_uuid, user, VIEW)
+    if dashboard.subject != "issues":
+        raise HTTPException(400, "Issues are created on an issue board, which has a repo.")
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(422, "An issue needs a title.")
+    fields: dict = {"title": title}
+    if payload.body and payload.body.strip():
+        fields["body"] = payload.body
+    if payload.labels:
+        fields["labels"] = payload.labels
+    if payload.assignees:
+        fields["assignees"] = payload.assignees
+    if payload.milestone is not None:
+        fields["milestone"] = payload.milestone
+    if payload.issue_type:
+        fields["type"] = payload.issue_type
+    client = GitHubClient(write_token(session, dashboard, user))
+    try:
+        issue = await client.create_issue(dashboard.repo_owner, dashboard.repo_name, fields)
+    except GitHubError as exc:
+        raise HTTPException(exc.status_code, exc.message)
+    finally:
+        await client.aclose()
+    return issue_to_card(issue, has_local_note=False)
 
 
 @router.post("/{dashboard_uuid}/issues/{number}/close", response_model=IssueCardOut)

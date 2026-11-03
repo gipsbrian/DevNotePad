@@ -9,6 +9,7 @@ import { TokenBadge } from "../components/TokenBadge";
 import { ColumnView } from "../components/ColumnView";
 import { DragLayer, landsIn } from "../components/DragLayer";
 import { ColumnEditorModal, type ColumnFilterPayload } from "../components/ColumnEditorModal";
+import { NewIssueModal, type NewIssuePayload } from "../components/NewIssueModal";
 import { IssueStack, MAX_OPEN_ISSUES } from "../components/IssueStack";
 import { ClosedSection, CLOSED_RANGES } from "../components/ClosedSection";
 import { StickyColumn } from "../components/StickyColumn";
@@ -119,6 +120,7 @@ export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedT
   const [repoMetadata, setRepoMetadata] = useState<RepoMetadata | null>(null);
   const [appSettings, setAppSettings] = useState<Settings | null>(null);
   const [showCustomize, setShowCustomize] = useState(false);
+  const [showNewIssue, setShowNewIssue] = useState(false);
   const [showShare, setShowShare] = useState(false);
   // `error` is fatal (the board couldn't load at all); `actionError` is a
   // transient failure from one action, which must not blow away a board
@@ -387,17 +389,35 @@ export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedT
     handleTrackIssue(issueNumber, target, source?.kind === "tracking" ? source.id : undefined);
   }
 
-  async function openColumnEditor(column: Column | null = null) {
-    if (!repoMetadata) {
-      try {
-        setRepoMetadata(await api.getRepoMetadata(dashboardId));
-      } catch (e) {
-        setActionError((e as Error).message);
-        return;
-      }
+  /** The repo's labels, people and milestones, fetched once, on first need. */
+  async function ensureRepoMetadata(): Promise<boolean> {
+    if (repoMetadata) return true;
+    try {
+      setRepoMetadata(await api.getRepoMetadata(dashboardId));
+      return true;
+    } catch (e) {
+      setActionError((e as Error).message);
+      return false;
     }
+  }
+
+  async function openColumnEditor(column: Column | null = null) {
+    if (!(await ensureRepoMetadata())) return;
     setEditingColumn(column);
     setShowColumnEditor(true);
+  }
+
+  async function openNewIssue() {
+    if (await ensureRepoMetadata()) setShowNewIssue(true);
+  }
+
+  /** Every column refetches, since any filter might match the new issue,
+   * and the issue opens so you see it landed. */
+  async function handleCreateIssue(payload: NewIssuePayload) {
+    const issue = await api.createIssue(dashboardId, payload);
+    setShowNewIssue(false);
+    openIssue(issue.number);
+    Promise.all(columns.map((c) => refreshColumnIssues(c.id))).catch((e) => setActionError((e as Error).message));
   }
 
   async function handleSubmitColumn(payload: ColumnFilterPayload) {
@@ -494,6 +514,14 @@ export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedT
             {dashboard.token_info && <TokenBadge info={dashboard.token_info} />}
             <button className="icon-btn" onClick={handleRefresh} title="Refresh" aria-label="Refresh">
               <IconRefresh style={refreshing ? { opacity: 0.5 } : undefined} />
+            </button>
+            <button
+              className="btn primary"
+              onClick={openNewIssue}
+              disabled={!canWrite}
+              title={canWrite ? `Open a new issue in ${dashboard.repo_owner}/${dashboard.repo_name}` : dashboard.write_block_reason ?? undefined}
+            >
+              <IconPlus /> New issue
             </button>
             {canManage && dashboard.kind === "personal" && (
               <button className="btn" onClick={() => setShowShare(true)}>
@@ -672,6 +700,16 @@ export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedT
         />
         </div>
       </div>
+
+      {showNewIssue && repoMetadata && (
+        <NewIssueModal
+          repo={`${dashboard.repo_owner}/${dashboard.repo_name}`}
+          metadata={repoMetadata}
+          me={appSettings?.github_username ?? null}
+          onCancel={() => setShowNewIssue(false)}
+          onSubmit={handleCreateIssue}
+        />
+      )}
 
       {showColumnEditor && repoMetadata && (
         <ColumnEditorModal
