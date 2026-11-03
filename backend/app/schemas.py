@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -95,6 +95,10 @@ class DashboardCreate(BaseModel):
     background_url: Optional[str] = None
     # "personal" (yours) or "organization" (admins only; every member sees it)
     kind: str = "personal"
+    # "pulls": a PR board over a whole GitHub org, named by org_ref (a login
+    # or a github.com URL) instead of a repo.
+    subject: Literal["issues", "pulls"] = "issues"
+    org_ref: Optional[str] = None
 
 
 class DashboardUpdate(BaseModel):
@@ -129,6 +133,7 @@ class DashboardOut(BaseModel):
     accent_color: Optional[str] = None
     background_url: Optional[str] = None
     kind: str = "personal"
+    subject: str = "issues"
     # What the caller may do: "view" or "manage".
     access: str = "manage"
     owner: Optional[str] = None
@@ -191,6 +196,8 @@ class DefaultOrganizationUpdate(BaseModel):
 
 class ColumnCreate(BaseModel):
     name: str
+    # "tracking" ignores every filter below; see Column.kind.
+    kind: Literal["filter", "tracking"] = "filter"
     state: Optional[str] = "open"
     labels: List[str] = []
     milestone: Optional[str] = None
@@ -202,6 +209,9 @@ class ColumnCreate(BaseModel):
 
 class ColumnUpdate(BaseModel):
     name: Optional[str] = None
+    # Switching to "tracking" clears the filter and starts empty; switching
+    # back to "filter" lets go of the tracked issues.
+    kind: Optional[Literal["filter", "tracking"]] = None
     state: Optional[str] = None
     labels: Optional[List[str]] = None
     # "" clears these back to "any".
@@ -233,6 +243,7 @@ class ColumnOut(BaseModel):
     # from the saved username rather than stored, so they can't be edited
     # or deleted and always sit last.
     virtual: bool = False
+    kind: str = "filter"
     # Whether dragging/moving into this column maps to one unambiguous
     # mutation — the frontend uses this to enable/disable drop.
     drag_compatible: bool
@@ -296,6 +307,29 @@ class IssueCardOut(BaseModel):
     sub_issues_completed: int = 0
 
 
+class PullCardOut(BaseModel):
+    """A pull request on a PR board. `repo` is "owner/name": numbers only
+    identify a PR within its repo."""
+
+    repo: str
+    number: int
+    title: str
+    html_url: str
+    author: Optional[AssigneeOut] = None
+    draft: bool = False
+    labels: List[LabelOut]
+    created_at: datetime
+    updated_at: datetime
+    comments_count: int
+    age_days: int
+
+
+class TrackPullRequest(BaseModel):
+    repo: str
+    number: int
+    from_column_id: Optional[int] = None
+
+
 class IssueDetailOut(BaseModel):
     number: int
     title: str
@@ -333,6 +367,13 @@ class SubIssueOut(BaseModel):
 
 class MoveIssueRequest(BaseModel):
     target_column_id: int
+
+
+class TrackIssueRequest(BaseModel):
+    issue_number: int
+    # A tracking column on the same board to take it out of: dragging
+    # between two tracking columns moves the issue rather than copying it.
+    from_column_id: Optional[int] = None
 
 
 # ---- Sticky notes (board-level scratch pad) ----

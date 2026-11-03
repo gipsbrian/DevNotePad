@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { AnimatePresence } from "framer-motion";
 import { api } from "../api/client";
 import type { Column, DashboardDetail, IssueCard, Note, RepoMetadata, Settings } from "../types/api";
 import { TokenBadge } from "../components/TokenBadge";
 import { ColumnView } from "../components/ColumnView";
+import { DragLayer, landsIn } from "../components/DragLayer";
 import { ColumnEditorModal, type ColumnFilterPayload } from "../components/ColumnEditorModal";
 import { IssueStack, MAX_OPEN_ISSUES } from "../components/IssueStack";
 import { ClosedSection, CLOSED_RANGES } from "../components/ClosedSection";
@@ -31,7 +34,29 @@ import {
   IconEye,
 } from "../components/Icons";
 
-export function DashboardBoardPage() {
+/** The search box keeps what's typed to itself and hands the board the
+ * query only once typing pauses: every pass over the board re-renders its
+ * cards, too slow to repeat for each keystroke. */
+export function BoardSearch({ onQuery, label = "issues" }: { onQuery: (query: string) => void; label?: string }) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    if (!value) return onQuery("");
+    const timer = setTimeout(() => onQuery(value), 200);
+    return () => clearTimeout(timer);
+  }, [value, onQuery]);
+  return (
+    <input
+      type="search"
+      placeholder={`Search ${label}…`}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      aria-label={`Search ${label} on this board`}
+    />
+  );
+}
+
+/** `switchedTo` names the organisation that opening this board moved you into. */
+export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedTo?: string | null } = {}) {
   const { id } = useParams();
   const navigate = useNavigate();
   const dashboardId = id!;
@@ -77,7 +102,7 @@ export function DashboardBoardPage() {
   const [dashboard, setDashboard] = useState<DashboardDetail | null>(null);
   const { reload: reloadOrganizations } = useOrganizations();
   // Set when opening this board moved you into its organisation.
-  const [switchedTo, setSwitchedTo] = useState<string | null>(null);
+  const [switchedTo, setSwitchedTo] = useState<string | null>(arrivedIn);
   const [columns, setColumns] = useState<Column[]>([]);
   const [issuesByColumn, setIssuesByColumn] = useState<Record<number, IssueCard[]>>({});
   const [closedIssues, setClosedIssues] = useState<IssueCard[]>([]);
@@ -100,7 +125,8 @@ export function DashboardBoardPage() {
   // that is otherwise working.
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  // Set by BoardSearch once typing pauses.
+  const [query, setQuery] = useState("");
   // Dismissal sticks per board — the warning matters, but not every visit.
   const noticeKey = `devnotepad-notice-dismissed-${dashboardId}`;
   const [noticeOpen, setNoticeOpen] = useState(() => {
@@ -312,15 +338,53 @@ export function DashboardBoardPage() {
     }
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
+  /** Optimistic: the card lands at once and the server's copy replaces it.
+   * From another tracking column it moves; from a filter column it's a
+   * copy, since the filter still matches it. */
+  async function handleTrackIssue(issueNumber: number, columnId: number, fromColumnId?: number) {
+    const card = Object.values(issuesByColumn)
+      .flat()
+      .find((i) => i.number === issueNumber);
+    const place = (list: IssueCard[] | undefined, fresh: IssueCard) =>
+      list?.some((i) => i.number === issueNumber)
+        ? list.map((i) => (i.number === issueNumber ? fresh : i))
+        : [fresh, ...(list ?? [])];
+    setIssuesByColumn((prev) => {
+      const next = { ...prev };
+      if (card) next[columnId] = place(prev[columnId], card);
+      if (fromColumnId !== undefined) next[fromColumnId] = (prev[fromColumnId] ?? []).filter((i) => i.number !== issueNumber);
+      return next;
+    });
+    try {
+      const fresh = await api.trackIssue(dashboardId, columnId, issueNumber, fromColumnId);
+      setIssuesByColumn((prev) => ({ ...prev, [columnId]: place(prev[columnId], fresh) }));
+    } catch (e) {
+      setActionError((e as Error).message);
+      refreshColumnIssues(columnId);
+      if (fromColumnId !== undefined) refreshColumnIssues(fromColumnId);
+    }
+  }
 
-    const issueNumber = active.data.current?.issueNumber as number | undefined;
-    const targetColumnId = over.data.current?.columnId as number | undefined;
-    const sourceColumnId = active.data.current?.sourceColumnId;
-    if (!issueNumber || !targetColumnId || targetColumnId === sourceColumnId) return;
-    handleMoveIssue(issueNumber, targetColumnId);
+  async function handleUntrackIssue(issueNumber: number, columnId: number) {
+    setIssuesByColumn((prev) => ({ ...prev, [columnId]: (prev[columnId] ?? []).filter((i) => i.number !== issueNumber) }));
+    try {
+      await api.untrackIssue(dashboardId, columnId, issueNumber);
+    } catch (e) {
+      setActionError((e as Error).message);
+      refreshColumnIssues(columnId);
+    }
+  }
+
+  // Drag state lives in DragLayer: setting it here would re-render the
+  // whole board when a card is picked up.
+  const boardRef = useRef<HTMLDivElement>(null);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const target = landsIn(event);
+    const issueNumber = event.active.data.current?.issueNumber as number | undefined;
+    if (target === null || !issueNumber) return;
+    const source = columns.find((c) => c.id === event.active.data.current?.sourceColumnId);
+    handleTrackIssue(issueNumber, target, source?.kind === "tracking" ? source.id : undefined);
   }
 
   async function openColumnEditor(column: Column | null = null) {
@@ -397,6 +461,8 @@ export function DashboardBoardPage() {
 
   const canManage = dashboard.access === "manage";
   const canWrite = dashboard.can_write;
+  // Cards only drag into tracking columns, which managers fill.
+  const canDrag = canManage && columns.some((c) => c.kind === "tracking");
   const accent = dashboard.accent_color ?? "#6d5efc";
   // The board canvas is either the dashboard's wallpaper or a rich
   // monochromatic gradient derived from its accent — light top-left,
@@ -424,13 +490,7 @@ export function DashboardBoardPage() {
           <div className="head-actions">
             <div className="search-pill">
               <IconSearch />
-              <input
-                type="search"
-                placeholder="Search issues…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                aria-label="Search issues on this board"
-              />
+              <BoardSearch onQuery={setQuery} />
             </div>
             {dashboard.token_info && <TokenBadge info={dashboard.token_info} />}
             <button className="icon-btn" onClick={handleRefresh} title="Refresh" aria-label="Refresh">
@@ -548,14 +608,14 @@ export function DashboardBoardPage() {
         )}
 
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="board">
+          <div className="board" ref={boardRef}>
             {columns.map((column) => (
               <ColumnView
                 key={column.id}
                 column={column}
                 dashboardId={dashboardId}
                 issues={issuesByColumn[column.id]?.filter(
-                  (i) => matchesSearch(i, search) && !justClosed.has(i.number)
+                  (i) => matchesSearch(i, query) && !justClosed.has(i.number)
                 )}
                 allColumns={columns}
                 notesByIssue={notesByIssue}
@@ -566,10 +626,13 @@ export function DashboardBoardPage() {
                 onOpenIssue={openIssue}
                 onMoveIssue={handleMoveIssue}
                 onCloseIssue={handleCloseIssue}
+                onTrackIssue={handleTrackIssue}
+                onUntrackIssue={handleUntrackIssue}
                 onEditColumn={openColumnEditor}
                 onDeleteColumn={handleDeleteColumn}
                 onMoveColumn={handleMoveColumn}
                 canManage={canManage}
+                canDrag={canDrag}
                 canWrite={canWrite}
                 writeBlockReason={dashboard.write_block_reason}
                 canMoveLeft={!column.virtual && columns.filter((c) => !c.virtual).findIndex((c) => c.id === column.id) > 0}
@@ -588,14 +651,17 @@ export function DashboardBoardPage() {
             )}
 
           </div>
+          <DragLayer boardRef={boardRef} />
         </DndContext>
 
         {/* Floats above the board rather than living in the column
-            scroll, so it's never scrolled out of reach. */}
-        <StickyColumn dashboardId={dashboardId} />
+            scroll, so it's never scrolled out of reach. In the body, since
+            the board's own layer would keep it under open issues whatever
+            its z-index. */}
+        {createPortal(<StickyColumn dashboardId={dashboardId} issuesOpen={openIssues.length > 0} />, document.body)}
 
         <ClosedSection
-          issues={closedIssues.filter((i) => matchesSearch(i, search))}
+          issues={closedIssues.filter((i) => matchesSearch(i, query))}
           dashboardId={dashboardId}
           notesByIssue={notesByIssue}
           days={closedDays}
@@ -621,20 +687,23 @@ export function DashboardBoardPage() {
         />
       )}
 
-      {openIssues.length > 0 && (
-        <IssueStack
-          dashboardId={dashboardId}
-          issueNumbers={openIssues}
-          columns={columns}
-          issuesByColumn={issuesByColumn}
-          onCloseOne={(n) => setOpenIssues(openIssues.filter((x) => x !== n))}
-          onCloseAll={() => setOpenIssues([])}
-          onAdd={(n) => setOpenIssues([...openIssues, n])}
-          onChanged={handleIssueChanged}
-          canWrite={canWrite}
-          writeBlockReason={dashboard.write_block_reason}
-        />
-      )}
+      <AnimatePresence>
+        {openIssues.length > 0 && (
+          <IssueStack
+            key="open-issues"
+            dashboardId={dashboardId}
+            issueNumbers={openIssues}
+            columns={columns}
+            issuesByColumn={issuesByColumn}
+            onCloseOne={(n) => setOpenIssues(openIssues.filter((x) => x !== n))}
+            onCloseAll={() => setOpenIssues([])}
+            onAdd={(n) => setOpenIssues([...openIssues, n])}
+            onChanged={handleIssueChanged}
+            canWrite={canWrite}
+            writeBlockReason={dashboard.write_block_reason}
+          />
+        )}
+      </AnimatePresence>
 
       {showShare && (
         <ShareModal

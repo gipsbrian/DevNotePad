@@ -1,9 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { AnimatePresence } from "framer-motion";
 import type { Column, IssueCard, Note } from "../types/api";
 import { IssueCardView } from "./IssueCardView";
 import { copyText, formatIssuesForCopy } from "../utils/clipboard";
 import { IconChevronLeft, IconChevronRight, IconDots, IconRefresh } from "./Icons";
+
+/** More cards than this arriving or leaving at once aren't animated. */
+const MAX_ANIMATED = 12;
+
+/** Cards drawn at a time; scrolling near the end draws the next batch. A
+ * column matching a thousand issues would otherwise draw a thousand cards
+ * on every re-render, freezing the page. */
+const BATCH = 60;
 
 function filterChips(column: Column): string[] {
   const chips: string[] = [];
@@ -28,6 +37,8 @@ export function ColumnView({
   onOpenIssue,
   onMoveIssue,
   onCloseIssue,
+  onTrackIssue,
+  onUntrackIssue,
   onEditColumn,
   onDeleteColumn,
   onMoveColumn,
@@ -35,6 +46,7 @@ export function ColumnView({
   canMoveLeft,
   canMoveRight,
   canManage = true,
+  canDrag = false,
   canWrite = true,
   writeBlockReason = null,
 }: {
@@ -49,6 +61,9 @@ export function ColumnView({
   onOpenIssue: (issueNumber: number) => void;
   onMoveIssue: (issueNumber: number, targetColumnId: number) => void;
   onCloseIssue: (issueNumber: number) => void;
+  /** Into a tracking column; `fromColumnId` set when leaving one. */
+  onTrackIssue: (issueNumber: number, columnId: number, fromColumnId?: number) => void;
+  onUntrackIssue: (issueNumber: number, columnId: number) => void;
   onEditColumn: (column: Column) => void;
   onDeleteColumn: (columnId: number) => void;
   onMoveColumn: (columnId: number, direction: -1 | 1) => void;
@@ -57,15 +72,29 @@ export function ColumnView({
   canMoveRight: boolean;
   /** Editing, moving and removing the column. */
   canManage?: boolean;
+  /** Whether its cards can be dragged into tracking columns. */
+  canDrag?: boolean;
   /** Moving and closing its cards on GitHub. */
   canWrite?: boolean;
   writeBlockReason?: string | null;
 }) {
+  const tracking = column.kind === "tracking";
+  // Only tracking columns take drops: a filter column shows whatever
+  // matches its filter, so dropping into one would mean nothing.
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `column-${column.id}`,
-    data: { type: "cards", columnId: column.id },
-    disabled: !column.drag_compatible || !canWrite,
+    data: { type: "cards", columnId: column.id, tracking },
+    disabled: !tracking || !canManage,
   });
+  const droppable = tracking && canManage;
+  // Hover targets re-render this column while a card is dragged; the same
+  // lists each time let its cards skip re-rendering (IssueCardView is
+  // memoised), which kept dragging smooth.
+  const otherColumns = useMemo(() => allColumns.filter((c) => c.id !== column.id), [allColumns, column.id]);
+  const trackingColumns = useMemo(
+    () => (canManage ? allColumns.filter((c) => c.kind === "tracking" && c.id !== column.id) : []),
+    [allColumns, column.id, canManage]
+  );
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -104,10 +133,46 @@ export function ColumnView({
     setCopied(ok ? `Copied ${list.length} issue${list.length === 1 ? "" : "s"}` : "Couldn’t copy");
   }
 
-  const chips = filterChips(column);
+  const chips = tracking ? ["tracking"] : filterChips(column);
+
+  // Cards animate in and out one or a few at a time. A wholesale change
+  // (first load, a new filter, a big refresh) swaps the list instantly:
+  // animating hundreds of cards at once only stalls the page. A new key
+  // remounts the presence group, and `initial={false}` then skips entrances.
+  const [limit, setLimit] = useState(BATCH);
+  const drawn = issues?.slice(0, limit);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const hasMore = (issues?.length ?? 0) > limit;
+
+  useEffect(() => {
+    const more = moreRef.current;
+    if (!hasMore || !more || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => entries[0].isIntersecting && setLimit((l) => l + BATCH),
+      { root: bodyRef.current, rootMargin: "300px" }
+    );
+    observer.observe(more);
+    return () => observer.disconnect();
+  }, [hasMore, limit]);
+
+  const shown = useRef<number[]>([]);
+  const generation = useRef(0);
+  const numbers = drawn?.map((i) => i.number) ?? [];
+  const before = new Set(shown.current);
+  const after = new Set(numbers);
+  const arriving = numbers.filter((n) => !before.has(n)).length;
+  const leaving = shown.current.filter((n) => !after.has(n)).length;
+  if (arriving > MAX_ANIMATED || leaving > MAX_ANIMATED) generation.current += 1;
+  shown.current = numbers;
 
   return (
-    <section className={`column${isOver && column.drag_compatible ? " is-over" : ""}`}>
+    // Whether a drag is under way, and from where, the stylesheet reads off
+    // attributes DragLayer sets, so no column re-renders for it.
+    <section
+      className={`column${tracking ? " tracking" : ""}${droppable ? " droppable" : ""}${isOver && droppable ? " is-over" : ""}`}
+      data-column-id={column.id}
+    >
       <header className="column-header">
         <div className="column-title">
           <span className="column-dot" style={{ background: accentColor }} />
@@ -130,6 +195,7 @@ export function ColumnView({
               auto
             </span>
           )}
+
           {!column.virtual && canManage && (
             <>
               <button
@@ -199,24 +265,53 @@ export function ColumnView({
         </div>
       )}
 
-      <div className="column-body" ref={setDropRef}>
+      <div
+        className="column-body"
+        ref={(node) => {
+          setDropRef(node);
+          bodyRef.current = node;
+        }}
+      >
         {loading && [0, 1].map((i) => <div key={i} className="skeleton card-skeleton" />)}
-        {issues?.map((issue) => (
-          <IssueCardView
-            key={issue.number}
-            issue={issue}
-            dashboardId={dashboardId}
-            columnId={column.id}
-            otherColumns={allColumns.filter((c) => c.id !== column.id)}
-            notesByIssue={notesByIssue}
-            onOpen={onOpenIssue}
-            onMove={onMoveIssue}
-            onCloseIssue={onCloseIssue}
-            canWrite={canWrite}
-            writeBlockReason={writeBlockReason}
-          />
-        ))}
-        {!loading && issues?.length === 0 && <div className="column-empty">Nothing here right now.</div>}
+        <AnimatePresence initial={false} key={generation.current}>
+          {drawn?.map((issue) => (
+            <IssueCardView
+              key={issue.number}
+              issue={issue}
+              dashboardId={dashboardId}
+              columnId={column.id}
+              otherColumns={otherColumns}
+              notesByIssue={notesByIssue}
+              onOpen={onOpenIssue}
+              onMove={onMoveIssue}
+              onCloseIssue={onCloseIssue}
+              onTrack={onTrackIssue}
+              onUntrack={onUntrackIssue}
+              trackingColumns={trackingColumns}
+              inTrackingColumn={tracking}
+              canManage={canManage}
+              draggable={canDrag}
+              canWrite={canWrite}
+              writeBlockReason={writeBlockReason}
+            />
+          ))}
+        </AnimatePresence>
+        {hasMore && (
+          // Drawn on reaching it; a button too, for keyboards and for a
+          // browser without IntersectionObserver.
+          <button ref={moreRef} className="column-more" onClick={() => setLimit((l) => l + BATCH)}>
+            Showing {limit} of {issues?.length} · more as you scroll
+          </button>
+        )}
+        {!loading && issues?.length === 0 && (
+          <div className="column-empty">
+            {tracking
+              ? canManage
+                ? "Drag issues here to keep track of them."
+                : "Nothing tracked here yet."
+              : "Nothing here right now."}
+          </div>
+        )}
       </div>
     </section>
   );

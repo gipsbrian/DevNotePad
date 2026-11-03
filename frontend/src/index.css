@@ -312,13 +312,33 @@ a {
 }
 
 .search-pill input {
+  /* Safari draws type="search" as its own grey rounded field unless told
+     not to, which shows up as a box inside the pill. */
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
+  border-radius: 0;
   background: none;
   outline: none;
+  box-shadow: none;
   padding: 0;
+  flex: 1;
+  min-width: 0;
   width: 190px;
+  height: 100%;
   font-size: 13.5px;
   color: var(--text);
+}
+
+/* The pill shows focus itself; the input's own ring (from the general
+   input:focus rule below) would draw a second box inside it. */
+.search-pill input:focus {
+  border: none;
+  box-shadow: none;
+}
+
+.search-pill input::-webkit-search-decoration {
+  -webkit-appearance: none;
 }
 
 .search-pill input::placeholder {
@@ -763,6 +783,94 @@ a {
   box-shadow: var(--shadow-md);
 }
 
+/* While a card is dragged (DragLayer sets the attributes): tracking
+   columns invite the drop, the rest step back, and the column the card
+   came from stays as it is. */
+.column {
+  transition: box-shadow 0.15s ease, outline-color 0.15s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
+.board[data-dragging] .column.droppable:not([data-drag-source]) {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.board[data-dragging] .column.droppable.is-over:not([data-drag-source]) {
+  outline-style: solid;
+  outline-color: var(--accent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 16%, transparent), var(--shadow-md);
+}
+
+.board[data-dragging] .column:not(.droppable):not([data-drag-source]) {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+/* The copy that follows the pointer, lifted off the board. */
+.card-ghost {
+  cursor: grabbing;
+  transform: rotate(2deg) scale(1.03);
+  box-shadow: var(--shadow-lg);
+}
+
+.column-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+
+.column-kind-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.column-kind-option span {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  line-height: 1.4;
+}
+
+.column-kind-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.column-kind-option.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-ghost {
+    transform: none;
+  }
+}
+
 .column-header {
   padding: 13px 14px 10px;
   display: flex;
@@ -893,6 +1001,20 @@ a {
   min-height: 60px;
 }
 
+.column-more {
+  border: none;
+  background: none;
+  padding: 10px 6px 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.column-more:hover {
+  color: var(--text);
+}
+
 .column-empty {
   font-size: 12.5px;
   color: var(--text-subtle);
@@ -965,7 +1087,7 @@ a {
 .note-wall-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 75; /* above the pad, even when it sits over open issues */
   display: grid;
   place-items: center;
   padding: 4vh 4vw;
@@ -1193,6 +1315,36 @@ a {
 }
 
 .sticky-tab svg { width: 16px; height: 16px; }
+
+/* With issues open, the pad waits as a bubble above their backdrop
+   (z-index 60) and unfolds from its corner when brought in front. */
+.sticky-bubble,
+.sticky-column.floating.in-front {
+  z-index: 70;
+}
+
+.sticky-column.floating.in-front {
+  animation: sticky-front-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+  box-shadow: 0 18px 50px rgba(8, 12, 20, 0.45);
+}
+
+.sticky-column.floating.in-front.bottom-right { transform-origin: bottom right; }
+.sticky-column.floating.in-front.bottom-left  { transform-origin: bottom left; }
+.sticky-column.floating.in-front.top-right    { transform-origin: top right; }
+.sticky-column.floating.in-front.top-left     { transform-origin: top left; }
+
+@keyframes sticky-front-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sticky-column.floating.in-front {
+    animation: none;
+  }
+}
 
 .sticky-tab-count {
   background: rgba(74, 58, 0, 0.2);
@@ -1586,6 +1738,16 @@ a {
   color: var(--accent);
 }
 
+.add-column-form {
+  cursor: default;
+  padding: 14px;
+  gap: 8px;
+}
+
+.add-column-form input {
+  width: 100%;
+}
+
 /* ---------------- Cards ---------------- */
 
 .card {
@@ -1595,7 +1757,9 @@ a {
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   position: relative;
-  transition: box-shadow 0.15s ease, transform 0.12s ease;
+  /* Not transform: framer-motion drives it every frame, and a CSS
+     transition on top makes drags and springs lag behind. */
+  transition: box-shadow 0.15s ease;
 }
 
 .card:hover {
@@ -1619,6 +1783,24 @@ a {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-subtle);
+}
+
+/* PR boards: which repo a PR is in, and whether it's a draft. */
+.pull-repo {
+  color: var(--text-muted);
+}
+
+.pull-draft {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.pull-card.draft .card-title {
+  color: var(--text-muted);
 }
 
 .card-title {
@@ -3501,6 +3683,25 @@ textarea {
   position: relative;
   flex: 1;
   min-width: 0;
+}
+
+/* The backdrop dims and blurs in while the pane grows out of its card
+   (utils/cardOrigin.ts); both reverse on close. */
+.issue-overlay {
+  animation: issue-overlay-in 0.28s ease both;
+}
+
+@keyframes issue-overlay-in {
+  from {
+    background-color: rgba(12, 15, 20, 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .issue-overlay {
+    animation: none;
+  }
 }
 
 /* Each pane scrolls on its own, so a long issue can't push a short one

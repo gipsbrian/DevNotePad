@@ -39,6 +39,7 @@ function makeColumn(overrides: Partial<Column> = {}): Column {
     creator: null,
     issue_type: null,
     virtual: false,
+    kind: "filter",
     drag_compatible: true,
     ...overrides,
   };
@@ -120,6 +121,43 @@ describe("IssueCardView", () => {
     renderCard({ issue: makeIssue({ state: "closed" }) });
     fireEvent.click(screen.getByTitle("Card actions"));
     expect(screen.queryByRole("menuitem", { name: /close issue/i })).not.toBeInTheDocument();
+  });
+
+  it("lists tracking columns under Track in, never under Move to", () => {
+    const onTrack = vi.fn();
+    const watching = makeColumn({ id: 5, name: "Watching", kind: "tracking", drag_compatible: false });
+    renderCard({
+      otherColumns: [makeColumn({ id: 2, name: "Done" }), watching],
+      trackingColumns: [watching],
+      canManage: true,
+      onTrack,
+    });
+    fireEvent.click(screen.getByTitle("Card actions"));
+    // "Done" is the relabel move; "Watching" appears once, as a track target.
+    expect(screen.getAllByRole("menuitem", { name: "Watching" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Watching" }));
+    expect(onTrack).toHaveBeenCalledWith(7, 5, undefined);
+  });
+
+  it("moves between tracking columns and can stop tracking", () => {
+    const onTrack = vi.fn();
+    const onUntrack = vi.fn();
+    const later = makeColumn({ id: 6, name: "Later", kind: "tracking" });
+    renderCard({ columnId: 5, inTrackingColumn: true, trackingColumns: [later], canManage: true, onTrack, onUntrack });
+    fireEvent.click(screen.getByTitle("Card actions"));
+    expect(screen.getByText("Move into")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Later" }));
+    expect(onTrack).toHaveBeenCalledWith(7, 6, 5);
+
+    fireEvent.click(screen.getByTitle("Card actions"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /stop tracking here/i }));
+    expect(onUntrack).toHaveBeenCalledWith(7, 5);
+  });
+
+  it("offers no tracking actions to someone who can't manage the board", () => {
+    renderCard({ columnId: 5, inTrackingColumn: true, trackingColumns: [], canManage: false });
+    fireEvent.click(screen.getByTitle("Card actions"));
+    expect(screen.queryByRole("menuitem", { name: /stop tracking/i })).not.toBeInTheDocument();
   });
 
   it("marks long-open issues distinctly", () => {

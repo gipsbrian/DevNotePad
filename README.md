@@ -196,7 +196,11 @@ or individually: `make test-backend` / `make test-frontend`.
 - Columns are saved filters over labels, state, milestone, assignee,
   author and issue type that already exist on the repo.
 - Cards carry labels, assignees, age, comment and sub-issue counts.
-- Drag or use a card's menu to move an issue between compatible columns.
+- Tracking columns: drag in the issues you want to keep an eye on,
+  whatever their labels. Closed ones drop out by themselves.
+- PR boards: your open pull requests and review requests across a GitHub
+  org, per viewer, plus tracking columns for the PRs you follow.
+- Move an issue between compatible filter columns from its card's menu.
 - Close an issue, comment on it, or read its comments without leaving the
   board.
 - Private notes per issue, pushed to GitHub as a comment only when you ask.

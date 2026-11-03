@@ -180,21 +180,71 @@ DevNotePad only — it never touches GitHub itself.
 
 ## Adding columns
 
-On a dashboard, click **+ Add column**. Pick from the repo's *existing*
+On a dashboard, click **+ Add column** and choose its type:
+
+- **Filter** shows every issue matching what you pick (below).
+- **Tracking** has no filter. It holds exactly the issues you drag into
+  it, whatever their labels -- for keeping an eye on a handful of issues
+  that no filter describes. See [Tracking columns](#tracking-columns).
+
+A filter column with nothing picked shows every open issue on the repo;
+the dialog says so and offers to make it a tracking column instead. An
+existing column can switch type from its **Edit column** dialog: becoming
+a tracking column clears its filter and starts it empty, and going back to
+a filter lets go of the issues it tracked.
+
+For a filter column, pick from the repo's *existing*
 labels, milestones, assignees, issue authors and issue types — nothing is typed freely
 except the column's own name. Edit a column's filters later with the
 **⋯** button in its header (the two automatic "…me" columns are marked
 `auto` and aren't editable). A column with:
 
-- a single label -> dragging/moving a card into it **adds** that label
-  (never removes labels from other columns)
-- `state: closed` and no other filters -> dragging/moving a card into it
-  **closes the issue**
+- a single label -> moving a card into it from the card's `⋯` menu
+  **adds** that label (never removes labels from other columns)
+- `state: closed` and no other filters -> moving a card into it **closes
+  the issue**
 
 Columns with a more specific combination of filters (e.g. a label *and* a
-milestone) are view-only for drag/move, since there's no single
-unambiguous action to take — use the issue detail modal to change those
-fields directly on GitHub instead.
+milestone) can't be moved into, since there's no single unambiguous
+action to take -- use the issue detail modal to change those fields
+directly on GitHub instead.
+
+## Tracking columns
+
+- **Drag a card** into a tracking column to add it. Only tracking columns
+  take a drop; while you drag, they're outlined and every other column
+  fades back. The card stays in the column it came from, since its
+  filter still matches it.
+- **Drag between two tracking columns** to move a card from one to the
+  other. The card's `⋯` menu does the same (**Track in** / **Move into**),
+  and **Stop tracking here** takes it out.
+- **Closed issues drop out by themselves**, as do issues that are deleted
+  or transferred to another repo.
+- Nothing about this touches GitHub: the list is kept by DevNotePad. Board
+  managers fill tracking columns; on a board shared with you, you see
+  them but can't change them.
+- A tracking column holds up to 100 issues. Each is fetched from GitHub
+  when the column loads, so a long one costs more of the token's rate
+  limit than a filter column does.
+
+## PR boards
+
+A PR board follows pull requests across a whole GitHub organisation
+instead of one repo's issues. Make one from **New dashboard** by choosing
+**Pull requests** and naming the org (`my-org` or its github.com URL).
+
+- **My open PRs** and **Review requested** are automatic columns. Each
+  person sees their own, built from the GitHub username in their settings,
+  so on a shared or organisation board everyone sees what's on their plate.
+  Without a username set, the board says so and these columns stay away.
+- **Your own columns are tracking columns.** Drag a PR into one to keep an
+  eye on it, or use its card's `...` menu, exactly as on an issue board.
+  Merged, closed and deleted PRs drop out by themselves.
+- **Click a card** to open the PR on GitHub. A PR board only reads from
+  GitHub; nothing on it writes there.
+- The board's token needs read access to the org's repos (for a
+  fine-grained token, **Pull requests: Read-only**). The automatic columns
+  use GitHub search, which allows 30 requests a minute per token.
 
 ## Working with cards
 
@@ -218,9 +268,10 @@ fields directly on GitHub instead.
   one with the **✕** above its pane, or all of them with Escape.
 - **The open issues are part of the address**, so a refresh reopens
   exactly what you were reading and the link can be sent to someone else.
-- **Move a card** either by dragging it between compatible columns, or via
-  the `⋯` menu on the card for a non-drag alternative — both use the exact
-  same underlying action.
+- **Move a card** to a filter column from the `⋯` menu on the card, which
+  changes the issue on GitHub as described in
+  [Adding columns](#adding-columns). Dragging is only for
+  [tracking columns](#tracking-columns).
 - **Close an issue** from that same `⋯` menu without opening it. It asks
   once (`Close issue` → `Really close #123?`) because it closes the issue
   on GitHub for real.
@@ -287,6 +338,12 @@ always reachable.
   page through it. Double-click a note to edit it.
 - Use the corner button to move the panel between the four corners, or
   collapse it to a small tab. Both are remembered per board.
+- **While issues are open** the pad steps aside into a bubble in its
+  corner, sitting above the open issues rather than under them. Hover
+  the bubble to peek at the pad, or click it to keep it in front; clicking
+  or typing in a peek keeps it too. The layers button in its header, or
+  Escape, sends it back to the bubble (a second Escape then closes the
+  issues). Closing the issues puts the pad back the way you had it.
 
 ## Closed issues
 
@@ -302,7 +359,12 @@ repo's whole closed history takes many seconds and delays the board.
 
 The search box filters cards already loaded on the dashboard (title,
 issue number, summary text, and label names) — it doesn't query GitHub
-again, so it's instant but only searches what's currently on the board.
+again, so it only searches what's currently on the board. The board
+updates once you pause typing rather than on every letter.
+
+A column with many issues draws them 60 at a time, adding more as you
+scroll toward its end; its count still shows the full total, and copying
+its issues copies all of them.
 
 ## Theme and appearance
 

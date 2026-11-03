@@ -43,6 +43,8 @@ export interface Dashboard {
   background_url: string | null;
   /** "personal" is one person's; "organization" is managed by admins and seen by every member. */
   kind: "personal" | "organization";
+  /** "issues" covers one repo; "pulls" covers pull requests across the GitHub org in `repo_owner`. */
+  subject: "issues" | "pulls";
   /** What you may do with it: "view" (read only) or "manage". */
   access: "view" | "manage";
   owner: string | null;
@@ -105,6 +107,8 @@ export interface Column {
   creator: string | null;
   issue_type: string | null;
   virtual: boolean;
+  /** "tracking": holds exactly the issues dropped into it, no filter. */
+  kind: "filter" | "tracking";
   drag_compatible: boolean;
 }
 
@@ -156,6 +160,21 @@ export interface IssueCard {
   has_local_note: boolean;
   sub_issues_total: number;
   sub_issues_completed: number;
+}
+
+/** A pull request on a PR board. Numbers repeat across repos, so `repo` ("owner/name") is part of its identity. */
+export interface PullCard {
+  repo: string;
+  number: number;
+  title: string;
+  html_url: string;
+  author: Assignee | null;
+  draft: boolean;
+  labels: Label[];
+  created_at: string;
+  updated_at: string;
+  comments_count: number;
+  age_days: number;
 }
 
 export interface SubIssue {

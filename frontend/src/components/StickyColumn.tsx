@@ -21,6 +21,7 @@ import {
   IconCorner,
   IconSearch,
   IconGrid,
+  IconLayers,
 } from "./Icons";
 
 const CORNERS = ["bottom-right", "bottom-left", "top-right", "top-left"] as const;
@@ -53,7 +54,7 @@ function formatCreated(iso: string): string {
     : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export function StickyColumn({ dashboardId }: { dashboardId: string }) {
+export function StickyColumn({ dashboardId, issuesOpen = false }: { dashboardId: string; issuesOpen?: boolean }) {
   const [notes, setNotes] = useState<StickyNote[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [index, setIndex] = useState(0);
@@ -99,6 +100,43 @@ export function StickyColumn({ dashboardId }: { dashboardId: string }) {
   function cycleCorner() {
     setCorner((c) => CORNERS[(CORNERS.indexOf(c) + 1) % CORNERS.length]);
   }
+
+  // With issues open the pad gives way: it waits as a bubble in its
+  // corner, above the issues rather than buried under their backdrop.
+  // Hovering the bubble peeks at the pad; clicking it, or starting to
+  // work in a peek, keeps it in front until it's sent back.
+  const [front, setFront] = useState<"none" | "peek" | "pinned">("none");
+  const peekTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!issuesOpen) setFront("none");
+  }, [issuesOpen]);
+
+  function peekSoon(next: "none" | "peek") {
+    window.clearTimeout(peekTimer.current);
+    // A short grace either way: brushing past the bubble shouldn't open
+    // the pad, and the pointer leaving its edge shouldn't snap it shut.
+    peekTimer.current = window.setTimeout(
+      () => setFront((f) => (f === "pinned" ? f : next)),
+      next === "peek" ? 140 : 320
+    );
+  }
+
+  useEffect(() => () => window.clearTimeout(peekTimer.current), []);
+
+  // Escape sends the pad back before it reaches the open issues, which
+  // would otherwise all close.
+  useEffect(() => {
+    if (front === "none") return;
+    function onKey(e: KeyboardEvent) {
+      // The note wall answers Escape itself.
+      if (e.key !== "Escape" || showAll) return;
+      e.stopImmediatePropagation();
+      setFront("none");
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [front, showAll]);
 
   const load = useCallback(async () => {
     try {
@@ -237,7 +275,23 @@ export function StickyColumn({ dashboardId }: { dashboardId: string }) {
   const progress = useMemo(() => (current ? taskProgress(current.body) : null), [current]);
   const isEditing = composing || (current && editingId === current.id);
 
-  if (collapsed) {
+  if (issuesOpen && front === "none") {
+    return (
+      <button
+        className={`sticky-tab sticky-bubble ${corner}`}
+        onMouseEnter={() => peekSoon("peek")}
+        onMouseLeave={() => window.clearTimeout(peekTimer.current)}
+        onClick={() => setFront("pinned")}
+        title="Sticky notes (hover to peek, click to keep in front)"
+        aria-label="Bring sticky notes in front"
+      >
+        <IconNote />
+        {notes.length > 0 && <span className="sticky-tab-count">{notes.length}</span>}
+      </button>
+    );
+  }
+
+  if (collapsed && !issuesOpen) {
     return (
       <button
         className={`sticky-tab ${corner}`}
@@ -252,8 +306,14 @@ export function StickyColumn({ dashboardId }: { dashboardId: string }) {
 
   return (
     <section
-      className={`sticky-column floating ${corner}${isEditing ? " editing" : ""}`}
+      className={`sticky-column floating ${corner}${isEditing ? " editing" : ""}${issuesOpen ? " in-front" : ""}`}
       aria-label="Sticky notes"
+      onMouseEnter={() => front === "peek" && window.clearTimeout(peekTimer.current)}
+      onMouseLeave={() => front === "peek" && peekSoon("none")}
+      // Working in a peek keeps it: it mustn't vanish mid-sentence because
+      // the pointer drifted off the edge.
+      onMouseDown={() => front === "peek" && setFront("pinned")}
+      onKeyDown={() => front === "peek" && setFront("pinned")}
     >
       <header className="sticky-head">
         <h3>Sticky notes</h3>
@@ -294,14 +354,25 @@ export function StickyColumn({ dashboardId }: { dashboardId: string }) {
               <IconPlus />
             </button>
           )}
-          <button
-            className="sticky-icon"
-            onClick={() => setCollapsed(true)}
-            title="Collapse"
-            aria-label="Collapse sticky notes"
-          >
-            <IconX />
-          </button>
+          {issuesOpen ? (
+            <button
+              className="sticky-icon"
+              onClick={() => setFront("none")}
+              title="Send behind, to make room for the open issues (Esc)"
+              aria-label="Send sticky notes behind"
+            >
+              <IconLayers />
+            </button>
+          ) : (
+            <button
+              className="sticky-icon"
+              onClick={() => setCollapsed(true)}
+              title="Collapse"
+              aria-label="Collapse sticky notes"
+            >
+              <IconX />
+            </button>
+          )}
         </div>
       </header>
 

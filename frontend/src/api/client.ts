@@ -18,6 +18,7 @@ import type {
   IssueCard,
   IssueDetail,
   Note,
+  PullCard,
   RepoMetadata,
   Insights,
   Member,
@@ -168,7 +169,9 @@ export const api = {
   getDashboard: (id: string) => request<DashboardDetail>(`/api/dashboards/${id}`),
   createDashboard: (payload: {
     name: string;
-    repo_ref: string;
+    repo_ref?: string;
+    subject?: Dashboard["subject"];
+    org_ref?: string;
     token?: string;
     accent_color?: string;
     background_url?: string;
@@ -194,6 +197,7 @@ export const api = {
     dashboardId: string,
     payload: {
       name: string;
+      kind?: "filter" | "tracking";
       state?: string | null;
       labels?: string[];
       milestone?: string | null;
@@ -232,6 +236,25 @@ export const api = {
     request<SubIssue[]>(`/api/dashboards/${dashboardId}/issues/${number}/sub-issues`),
   closeIssue: (dashboardId: string, number: number) =>
     request<IssueCard>(`/api/dashboards/${dashboardId}/issues/${number}/close`, { method: "POST" }),
+  /** Into a tracking column; from another tracking column it moves. */
+  trackIssue: (dashboardId: string, columnId: number, number: number, fromColumnId?: number) =>
+    request<IssueCard>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked`, {
+      method: "POST",
+      body: JSON.stringify({ issue_number: number, from_column_id: fromColumnId ?? null }),
+    }),
+  listColumnPulls: (dashboardId: string, columnId: number) =>
+    request<PullCard[]>(`/api/dashboards/${dashboardId}/columns/${columnId}/pulls`),
+  trackPull: (dashboardId: string, columnId: number, repo: string, number: number, fromColumnId?: number) =>
+    request<PullCard>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked-pulls`, {
+      method: "POST",
+      body: JSON.stringify({ repo, number, from_column_id: fromColumnId ?? null }),
+    }),
+  untrackPull: (dashboardId: string, columnId: number, repo: string, number: number) =>
+    request<void>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked-pulls/${repo}/${number}`, {
+      method: "DELETE",
+    }),
+  untrackIssue: (dashboardId: string, columnId: number, number: number) =>
+    request<void>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked/${number}`, { method: "DELETE" }),
   moveIssue: (dashboardId: string, number: number, targetColumnId: number) =>
     request<IssueCard>(`/api/dashboards/${dashboardId}/issues/${number}/move`, {
       method: "POST",
