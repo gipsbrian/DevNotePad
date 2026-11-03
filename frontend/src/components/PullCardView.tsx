@@ -165,15 +165,25 @@ const PullCardBody = memo(function PullCardBody({
 
       <div className="card-foot">
         <div className="card-meta">
-          <span
-            className={`age-bubble${pull.age_days >= 14 ? " long-open" : ""}`}
-            title={`Open for ${pull.age_days} day${pull.age_days === 1 ? "" : "s"}`}
-          >
-            <IconClock />
-            {pull.age_days}d
-          </span>
+          {pull.closed_at ? (
+            <span
+              className={`pull-state ${pull.merged ? "merged" : "closed"}`}
+              title={`${pull.merged ? "Merged" : "Closed"} ${new Date(pull.closed_at).toLocaleString()}, after ${pull.age_days}d`}
+            >
+              {pull.merged ? "Merged" : "Closed"}
+            </span>
+          ) : (
+            <span
+              className={`age-bubble${pull.age_days >= 14 ? " long-open" : ""}`}
+              title={`Open for ${pull.age_days} day${pull.age_days === 1 ? "" : "s"}`}
+            >
+              <IconClock />
+              {pull.age_days}d
+            </span>
+          )}
           <span className="meta-item" title={`Updated ${new Date(pull.updated_at).toLocaleString()} in ${owner}/${name}`}>
-            updated {new Date(pull.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            {pull.closed_at ? (pull.merged ? "merged " : "closed ") : "updated "}
+            {new Date(pull.closed_at ?? pull.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </span>
         </div>
         <div className="card-badges">

@@ -175,6 +175,9 @@ export interface PullCard {
   updated_at: string;
   comments_count: number;
   age_days: number;
+  /** Set once closed; `merged` tells a merge from a plain close. */
+  closed_at: string | null;
+  merged: boolean;
 }
 
 export interface SubIssue {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { api } from "../api/client";
 import type { Dashboard, Settings } from "../types/api";
 import { useOrganizations } from "../org-context";
@@ -22,6 +22,19 @@ export function CreateDashboardPage() {
   const [subject, setSubject] = useState<Dashboard["subject"]>("issues");
   const pulls = subject === "pulls";
   const [orgRef, setOrgRef] = useState("");
+  // A PR board is built from your GitHub username, so ask for it here when
+  // settings don't have it yet, rather than leaving the board empty.
+  const [username, setUsername] = useState("");
+  const needUsername = pulls && settings !== null && !settings.github_username;
+  const { reloadSettings } = useOutletContext<{ reloadSettings?: () => void }>() ?? {};
+  useEffect(() => {
+    if (!needUsername) return;
+    // The general token knows whose it is; offer that.
+    api
+      .detectUsername()
+      .then(({ login }) => login && setUsername((current) => current || login))
+      .catch(() => {});
+  }, [needUsername]);
   const { active } = useOrganizations();
   const isAdmin = active?.role === "admin";
   const [kind, setKind] = useState<Dashboard["kind"]>("personal");
@@ -52,6 +65,10 @@ export function CreateDashboardPage() {
     setSubmitting(true);
     setError(null);
     try {
+      if (needUsername) {
+        await api.updateSettings({ github_username: username.trim() });
+        reloadSettings?.();
+      }
       const dashboard = await api.createDashboard({
         name,
         ...(pulls ? { subject, org_ref: orgRef } : { repo_ref: repoRef }),
@@ -107,16 +124,36 @@ export function CreateDashboardPage() {
             </div>
           </div>
 
-          {pulls ? (
+          {pulls && (
             <div className="form-row">
               <label>GitHub organisation</label>
               <input value={orgRef} onChange={(e) => setOrgRef(e.target.value)} required placeholder="my-org or https://github.com/my-org" />
               <p className="empty-hint" style={{ marginTop: 6 }}>
-                Each person sees their own PRs here, from the GitHub username in their settings
-                {settings && !settings.github_username ? " (yours isn’t set yet)" : ""}.
+                Each person sees their own PRs here, from the GitHub username in their settings.
               </p>
             </div>
-          ) : (
+          )}
+
+          {needUsername && (
+            <div className="form-row">
+              <label htmlFor="pr-board-username">Your GitHub username</label>
+              <input
+                id="pr-board-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}"
+                title="A GitHub username: letters, digits and hyphens"
+                placeholder="octocat"
+                autoComplete="off"
+              />
+              <p className="empty-hint" style={{ marginTop: 6 }}>
+                Your open PRs and review requests come from this. It’s saved to your settings, where you can change it later.
+              </p>
+            </div>
+          )}
+
+          {!pulls && (
             <div className="form-row">
               <label>Repository</label>
               <input

@@ -16,6 +16,8 @@ const pull: PullCard = {
   updated_at: "2026-01-02T00:00:00Z",
   comments_count: 0,
   age_days: 3,
+  closed_at: null,
+  merged: false,
 };
 
 const watching: Column = {
@@ -83,6 +85,12 @@ describe("PullCardView", () => {
   it("has no menu for viewers with nowhere to track it", () => {
     renderCard({ canManage: false, trackingColumns: [] });
     expect(screen.queryByLabelText("Actions for acme/api#12")).toBeNull();
+  });
+
+  it("shows merged or closed instead of the age once a PR is closed", () => {
+    renderCard({ pull: { ...pull, closed_at: "2026-01-05T00:00:00Z", merged: true } });
+    expect(screen.getByText("Merged")).toBeInTheDocument();
+    expect(screen.queryByText("3d")).toBeNull();
   });
 
   it("keys PRs by repo as well as number", () => {

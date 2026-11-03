@@ -322,6 +322,9 @@ class PullCardOut(BaseModel):
     updated_at: datetime
     comments_count: int
     age_days: int
+    # Set once it's closed; `merged` tells a merge from a plain close.
+    closed_at: Optional[datetime] = None
+    merged: bool = False
 
 
 class TrackPullRequest(BaseModel):

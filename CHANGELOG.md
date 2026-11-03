@@ -10,6 +10,11 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ### Added
 
+- **Merged and closed PRs.** A PR board now has a section below its
+  columns, like an issue board's Closed section: the pull requests you
+  wrote or reviewed that were merged or closed, grouped by day, with the
+  same 7 days to all time range. Cards say whether a PR was merged or
+  closed, and when.
 - **PR boards.** A board over a whole GitHub organisation's pull
   requests. Two automatic columns follow whoever is looking, "My open
   PRs" and "Review requested", from the GitHub username in their

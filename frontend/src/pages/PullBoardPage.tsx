@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
@@ -11,6 +11,7 @@ import { PullCardView, pullKey } from "../components/PullCardView";
 import { StickyColumn } from "../components/StickyColumn";
 import { CustomizePanel } from "../components/CustomizePanel";
 import { ShareModal } from "../components/ShareModal";
+import { PullClosedSection } from "../components/PullClosedSection";
 import { BoardSearch } from "./DashboardBoardPage";
 import {
   IconAlert,
@@ -53,6 +54,19 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
   const [showShare, setShowShare] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [switchedTo, setSwitchedTo] = useState(arrivedIn);
+  const [closed, setClosed] = useState<PullCard[]>([]);
+  const [closedLoading, setClosedLoading] = useState(false);
+  const [closedError, setClosedError] = useState<string | null>(null);
+  // Remembered per board, like the issue board's closed range.
+  const closedDaysKey = `devnotepad-closed-days-${dashboardId}`;
+  const [closedDays, setClosedDays] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(closedDaysKey);
+      return saved === null ? 7 : Number(saved);
+    } catch {
+      return 7;
+    }
+  });
   const boardRef = useRef<HTMLDivElement>(null);
 
   const loadColumn = useCallback(
@@ -75,6 +89,35 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
     [dashboardId]
   );
 
+  const loadClosed = useCallback(
+    async (days: number) => {
+      setClosedLoading(true);
+      setClosedError(null);
+      try {
+        setClosed(await api.listClosedPulls(dashboardId, days));
+      } catch (e) {
+        setClosedError((e as Error).message);
+      } finally {
+        setClosedLoading(false);
+      }
+    },
+    [dashboardId]
+  );
+
+  // What loadAll reads, so a refresh keeps the range you picked.
+  const closedDaysRef = useRef(closedDays);
+  closedDaysRef.current = closedDays;
+
+  function handleChangeClosedDays(days: number) {
+    setClosedDays(days);
+    try {
+      localStorage.setItem(closedDaysKey, String(days));
+    } catch {
+      // non-critical
+    }
+    loadClosed(days);
+  }
+
   const loadAll = useCallback(async () => {
     try {
       const [dash, cols, s] = await Promise.all([api.getDashboard(dashboardId), api.listColumns(dashboardId), api.getSettings()]);
@@ -83,11 +126,13 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
       // The automatic columns are the point of the board, so they lead.
       const ordered = [...cols.filter((c) => c.virtual), ...cols.filter((c) => !c.virtual)];
       setColumns(ordered);
-      await Promise.all(ordered.map((c) => loadColumn(c.id)));
+      // Closed PRs are yours too, so they wait for a username like the
+      // automatic columns do.
+      await Promise.all([...ordered.map((c) => loadColumn(c.id)), s.github_username ? loadClosed(closedDaysRef.current) : null]);
     } catch (e) {
       setActionError((e as Error).message);
     }
-  }, [dashboardId, loadColumn]);
+  }, [dashboardId, loadColumn, loadClosed]);
 
   useEffect(() => {
     loadAll();
@@ -260,12 +305,7 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
             </div>
           )}
 
-          {settings && !settings.github_username && (
-            <div className="notice" role="status">
-              <IconAlert />
-              <span>Set your GitHub username in settings to see your open PRs and the ones waiting on your review.</span>
-            </div>
-          )}
+          {settings && !settings.github_username && <UsernamePrompt onSaved={loadAll} />}
 
           {!canManage && (
             <div className="notice view-only" role="status">
@@ -319,6 +359,16 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
           </DndContext>
 
           {createPortal(<StickyColumn dashboardId={dashboardId} issuesOpen={false} />, document.body)}
+
+          {settings?.github_username && (
+            <PullClosedSection
+              pulls={closed.filter((p) => matches(p, query))}
+              days={closedDays}
+              loading={closedLoading}
+              error={closedError}
+              onChangeDays={handleChangeClosedDays}
+            />
+          )}
         </div>
       </div>
 
@@ -507,6 +557,58 @@ function AddTrackingColumn({ onAdd }: { onAdd: (name: string) => void }) {
           Cancel
         </button>
       </div>
+    </form>
+  );
+}
+
+/** Shown only while the viewer has no GitHub username: the board's
+ * automatic columns and closed section are built from it, so ask right
+ * here, offering the general token's own account. */
+export function UsernamePrompt({ onSaved }: { onSaved: () => void }) {
+  const [username, setUsername] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { reloadSettings } = useOutletContext<{ reloadSettings?: () => void }>() ?? {};
+
+  useEffect(() => {
+    api
+      .detectUsername()
+      .then(({ login }) => login && setUsername((current) => current || login))
+      .catch(() => {});
+  }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.updateSettings({ github_username: username.trim() });
+      reloadSettings?.();
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="notice username-prompt" onSubmit={save}>
+      <IconAlert />
+      <label htmlFor="board-github-username">Your GitHub username shows your open PRs and review requests here:</label>
+      <input
+        id="board-github-username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        required
+        pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}"
+        title="A GitHub username: letters, digits and hyphens"
+        placeholder="octocat"
+        autoComplete="off"
+      />
+      <button className="btn primary" type="submit" disabled={saving}>
+        {saving ? "Saving…" : "Save"}
+      </button>
+      {error && <span className="username-prompt-error">{error}</span>}
     </form>
   );
 }

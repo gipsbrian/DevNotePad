@@ -188,3 +188,37 @@ def test_viewers_cannot_track_and_issue_boards_have_no_pull_routes(team):
 
     issues = personal(owner, name="issues")
     assert owner.get(f"/api/dashboards/{issues['id']}/columns/-3/pulls").status_code == 400
+
+
+@respx.mock
+def test_closed_prs_are_mine_or_reviewed_by_me_newest_first(client):
+    client.put("/api/settings", json={"github_username": "octocat"})
+    board = _pull_board(client)
+    mine = _pr(1, "acme/api", state="closed", closed_at="2026-03-01T00:00:00Z",
+               pull_request={"merged_at": "2026-03-01T00:00:00Z"})
+    both = _pr(2, "acme/web", state="closed", closed_at="2026-03-05T00:00:00Z",
+               pull_request={"merged_at": None})
+
+    def answer(request):
+        q = parse_qs(urlparse(str(request.url)).query)["q"][0]
+        return Response(200, json={"items": [mine, both] if "author:octocat" in q else [both]})
+
+    route = respx.get(SEARCH).mock(side_effect=answer)
+    resp = client.get(f"/api/dashboards/{board['id']}/pulls/closed?days=7")
+    assert resp.status_code == 200, resp.text
+    cards = resp.json()
+    # Deduplicated, most recently closed first, merges told from closes.
+    assert [(c["repo"], c["number"], c["merged"]) for c in cards] == [("acme/web", 2, False), ("acme/api", 1, True)]
+
+    queries = sorted(parse_qs(urlparse(str(c.request.url)).query)["q"][0] for c in route.calls)
+    assert all(q.startswith("is:pr is:closed archived:false org:acme closed:>=") for q in queries)
+    assert queries[0].endswith("author:octocat") and queries[1].endswith("reviewed-by:octocat")
+
+    # All time has no date bound.
+    client.get(f"/api/dashboards/{board['id']}/pulls/closed?days=0")
+    assert "closed:" not in parse_qs(urlparse(str(route.calls.last.request.url)).query)["q"][0]
+
+
+def test_closed_prs_need_a_username(client):
+    board = _pull_board(client)
+    assert client.get(f"/api/dashboards/{board['id']}/pulls/closed").status_code == 404
