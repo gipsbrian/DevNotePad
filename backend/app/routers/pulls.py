@@ -7,6 +7,7 @@ hold whatever PRs are dropped into them.
 
 import asyncio
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -43,6 +44,7 @@ def _repo_of(item: dict) -> str:
 
 def _to_card(item: dict) -> PullCardOut:
     created_at = _parse_dt(item["created_at"])
+    closed_at = _parse_dt(item["closed_at"]) if item.get("closed_at") else None
     author = item.get("user")
     return PullCardOut(
         repo=_repo_of(item),
@@ -55,7 +57,9 @@ def _to_card(item: dict) -> PullCardOut:
         created_at=created_at,
         updated_at=_parse_dt(item["updated_at"]),
         comments_count=item.get("comments", 0),
-        age_days=age_in_days(created_at, None),
+        age_days=age_in_days(created_at, closed_at),
+        closed_at=closed_at,
+        merged=bool((item.get("pull_request") or {}).get("merged_at")),
     )
 
 
@@ -113,6 +117,49 @@ async def _tracked(session: Session, dashboard: Dashboard, column: Column) -> li
     return kept
 
 
+def _viewer_login(session: Session, user: User) -> str:
+    """The viewer's saved GitHub username, checked as a login since it goes
+    into a search query, where a space would add terms of its own."""
+    username = get_settings(session, user.id).github_username
+    if not username:
+        raise HTTPException(404, "Set your GitHub username in settings to see your PRs here.")
+    if parse_org_ref(username) != username:
+        raise HTTPException(422, "Your saved GitHub username isn't a valid GitHub login.")
+    return username
+
+
+@router.get("/{dashboard_uuid}/pulls/closed", response_model=list[PullCardOut])
+async def list_closed_pulls(
+    dashboard_uuid: str, days: int = 7, session: Session = Depends(get_session), user: User = Depends(require_user)
+):
+    """PRs the viewer wrote or reviewed that were merged or closed in the
+    last `days` (0 = all time), most recently closed first."""
+    dashboard = _pull_board(session, dashboard_uuid, user, VIEW)
+    username = _viewer_login(session, user)
+    window = ""
+    if days > 0:
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+        window = f" closed:>={since}"
+    base = f"is:pr is:closed archived:false org:{dashboard.repo_owner}{window}"
+    client = GitHubClient(read_token(session, dashboard))
+    try:
+        authored, reviewed = await asyncio.gather(
+            client.search_all(f"{base} author:{username}"),
+            client.search_all(f"{base} reviewed-by:{username}"),
+        )
+    except GitHubError as exc:
+        raise HTTPException(exc.status_code, exc.message)
+    finally:
+        await client.aclose()
+
+    # A PR you both wrote and reviewed comes back from both searches.
+    seen: dict[str, dict] = {}
+    for item in authored + reviewed:
+        seen.setdefault(item["html_url"], item)
+    cards = [_to_card(i) for i in seen.values()]
+    return sorted(cards, key=lambda c: c.closed_at or c.updated_at, reverse=True)
+
+
 @router.get("/{dashboard_uuid}/columns/{column_id}/pulls", response_model=list[PullCardOut])
 async def list_column_pulls(
     dashboard_uuid: str, column_id: int, session: Session = Depends(get_session), user: User = Depends(require_user)
@@ -123,12 +170,7 @@ async def list_column_pulls(
         return [_to_card(i) for i in await _tracked(session, dashboard, column)]
 
     # The automatic columns follow whoever is looking, not the board's owner.
-    username = get_settings(session, user.id).github_username
-    if not username:
-        raise HTTPException(404, "Set your GitHub username in settings to see your PRs here.")
-    # It goes into a search query, where a space would add terms of its own.
-    if parse_org_ref(username) != username:
-        raise HTTPException(422, "Your saved GitHub username isn't a valid GitHub login.")
+    username = _viewer_login(session, user)
     qualifier = {VIRTUAL_MY_PULLS_ID: "author", VIRTUAL_REVIEW_ID: "review-requested"}.get(column_id)
     if not qualifier:
         raise HTTPException(404, "Column not found")

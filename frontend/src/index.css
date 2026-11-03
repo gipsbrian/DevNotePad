@@ -1879,6 +1879,23 @@ a {
   height: 12px;
 }
 
+/* Closed PRs: GitHub's own merged purple and closed red. */
+.pull-state {
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.pull-state.merged {
+  background: #8250df;
+}
+
+.pull-state.closed {
+  background: #cf222e;
+}
+
 .age-bubble {
   display: inline-flex;
   align-items: center;

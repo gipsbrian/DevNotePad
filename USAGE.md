@@ -240,11 +240,16 @@ instead of one repo's issues. Make one from **New dashboard** by choosing
 - **Your own columns are tracking columns.** Drag a PR into one to keep an
   eye on it, or use its card's `...` menu, exactly as on an issue board.
   Merged, closed and deleted PRs drop out by themselves.
+- **Merged and closed** sits below the columns, like an issue board's
+  Closed section: the PRs you wrote or reviewed that were merged or closed,
+  grouped by day, over 7 days by default (pick up to all time). Each card
+  says whether it was merged or closed.
 - **Click a card** to open the PR on GitHub. A PR board only reads from
   GitHub; nothing on it writes there.
 - The board's token needs read access to the org's repos (for a
   fine-grained token, **Pull requests: Read-only**). The automatic columns
-  use GitHub search, which allows 30 requests a minute per token.
+  and the closed section use GitHub search, which allows 30 requests a
+  minute per token; each load of a PR board makes four.
 
 ## Working with cards
 

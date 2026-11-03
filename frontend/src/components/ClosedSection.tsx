@@ -2,7 +2,7 @@ import type { IssueCard, Note } from "../types/api";
 import { IssueCardView } from "./IssueCardView";
 import { IconCheckCircle } from "./Icons";
 
-function dateGroupLabel(iso: string): string {
+export function dateGroupLabel(iso: string): string {
   const date = new Date(iso);
   const today = new Date();
   const yesterday = new Date();

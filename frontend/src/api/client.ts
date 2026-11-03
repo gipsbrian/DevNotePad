@@ -244,6 +244,9 @@ export const api = {
     }),
   listColumnPulls: (dashboardId: string, columnId: number) =>
     request<PullCard[]>(`/api/dashboards/${dashboardId}/columns/${columnId}/pulls`),
+  /** PRs you wrote or reviewed that closed in the last `days` (0 = all time). */
+  listClosedPulls: (dashboardId: string, days: number) =>
+    request<PullCard[]>(`/api/dashboards/${dashboardId}/pulls/closed?days=${days}`),
   trackPull: (dashboardId: string, columnId: number, repo: string, number: number, fromColumnId?: number) =>
     request<PullCard>(`/api/dashboards/${dashboardId}/columns/${columnId}/tracked-pulls`, {
       method: "POST",

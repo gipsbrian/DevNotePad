@@ -11,6 +11,7 @@ import { PullCardView, pullKey } from "../components/PullCardView";
 import { StickyColumn } from "../components/StickyColumn";
 import { CustomizePanel } from "../components/CustomizePanel";
 import { ShareModal } from "../components/ShareModal";
+import { PullClosedSection } from "../components/PullClosedSection";
 import { BoardSearch } from "./DashboardBoardPage";
 import {
   IconAlert,
@@ -53,6 +54,19 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
   const [showShare, setShowShare] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [switchedTo, setSwitchedTo] = useState(arrivedIn);
+  const [closed, setClosed] = useState<PullCard[]>([]);
+  const [closedLoading, setClosedLoading] = useState(false);
+  const [closedError, setClosedError] = useState<string | null>(null);
+  // Remembered per board, like the issue board's closed range.
+  const closedDaysKey = `devnotepad-closed-days-${dashboardId}`;
+  const [closedDays, setClosedDays] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(closedDaysKey);
+      return saved === null ? 7 : Number(saved);
+    } catch {
+      return 7;
+    }
+  });
   const boardRef = useRef<HTMLDivElement>(null);
 
   const loadColumn = useCallback(
@@ -75,6 +89,35 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
     [dashboardId]
   );
 
+  const loadClosed = useCallback(
+    async (days: number) => {
+      setClosedLoading(true);
+      setClosedError(null);
+      try {
+        setClosed(await api.listClosedPulls(dashboardId, days));
+      } catch (e) {
+        setClosedError((e as Error).message);
+      } finally {
+        setClosedLoading(false);
+      }
+    },
+    [dashboardId]
+  );
+
+  // What loadAll reads, so a refresh keeps the range you picked.
+  const closedDaysRef = useRef(closedDays);
+  closedDaysRef.current = closedDays;
+
+  function handleChangeClosedDays(days: number) {
+    setClosedDays(days);
+    try {
+      localStorage.setItem(closedDaysKey, String(days));
+    } catch {
+      // non-critical
+    }
+    loadClosed(days);
+  }
+
   const loadAll = useCallback(async () => {
     try {
       const [dash, cols, s] = await Promise.all([api.getDashboard(dashboardId), api.listColumns(dashboardId), api.getSettings()]);
@@ -83,11 +126,13 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
       // The automatic columns are the point of the board, so they lead.
       const ordered = [...cols.filter((c) => c.virtual), ...cols.filter((c) => !c.virtual)];
       setColumns(ordered);
-      await Promise.all(ordered.map((c) => loadColumn(c.id)));
+      // Closed PRs are yours too, so they wait for a username like the
+      // automatic columns do.
+      await Promise.all([...ordered.map((c) => loadColumn(c.id)), s.github_username ? loadClosed(closedDaysRef.current) : null]);
     } catch (e) {
       setActionError((e as Error).message);
     }
-  }, [dashboardId, loadColumn]);
+  }, [dashboardId, loadColumn, loadClosed]);
 
   useEffect(() => {
     loadAll();
@@ -319,6 +364,16 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
           </DndContext>
 
           {createPortal(<StickyColumn dashboardId={dashboardId} issuesOpen={false} />, document.body)}
+
+          {settings?.github_username && (
+            <PullClosedSection
+              pulls={closed.filter((p) => matches(p, query))}
+              days={closedDays}
+              loading={closedLoading}
+              error={closedError}
+              onChangeDays={handleChangeClosedDays}
+            />
+          )}
         </div>
       </div>
 
