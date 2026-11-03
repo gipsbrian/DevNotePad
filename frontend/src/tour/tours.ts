@@ -37,7 +37,7 @@ const STEPS: Record<TourName, DriveStep[]> = {
       popover: {
         title: "Start here",
         description:
-          "Add a GitHub token and your GitHub username. Boards read issues with that token, and your username adds “Assigned to me” and “Created by me” columns to every board.",
+          "Add a GitHub token and your GitHub username. Boards read GitHub with that token, and your username fills your own columns on PR boards.",
         side: "right",
       },
     },

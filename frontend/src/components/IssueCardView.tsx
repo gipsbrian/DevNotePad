@@ -198,7 +198,7 @@ const IssueCardBody = memo(function IssueCardBody({
       }}
       transition={{ type: "spring", stiffness: 420, damping: 34 }}
       // Scoped to the column: the same issue legitimately appears in
-      // several columns at once (e.g. "All open" and "Assigned to me"),
+      // several columns at once (e.g. "All open" and a tracking column),
       // and framer-motion collapses duplicate layoutIds into one element,
       // which made every copy after the first render blank.
       layoutId={`card-${columnId}-${issue.number}`}

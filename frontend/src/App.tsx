@@ -49,8 +49,8 @@ export default function App() {
     load();
   }, [load]);
 
-  // Nudge on first run: without a username there are no "…me" columns,
-  // and without any token nothing can load at all.
+  // Nudge on first run: without a username PR boards and personal
+  // analytics stay empty, and without any token nothing can load at all.
   const needsSetup = settings !== null && (!settings.github_username || !settings.has_default_token);
 
   return (

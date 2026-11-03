@@ -67,11 +67,11 @@ def test_a_pr_board_names_an_org_from_a_login_or_url(client):
         assert resp.status_code == 422, bad
 
 
-def test_auto_columns_need_a_username_and_ignore_the_my_columns_setting(client):
+def test_auto_columns_need_a_username(client):
     board = _pull_board(client)
     assert client.get(f"/api/dashboards/{board['id']}/columns").json() == []
 
-    client.put("/api/settings", json={"github_username": "octocat", "show_my_columns": False})
+    client.put("/api/settings", json={"github_username": "octocat"})
     columns = client.get(f"/api/dashboards/{board['id']}/columns").json()
     assert [(c["id"], c["name"], c["virtual"]) for c in columns] == [
         (-3, "My open PRs", True),

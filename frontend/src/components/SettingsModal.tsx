@@ -21,7 +21,6 @@ export function SettingsModal({
   const [username, setUsername] = useState(settings.github_username ?? "");
   const [orgUrl, setOrgUrl] = useState(settings.default_org_url ?? "");
   const [token, setToken] = useState("");
-  const [showMyColumns, setShowMyColumns] = useState(settings.show_my_columns);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detected, setDetected] = useState<string | null>(null);
@@ -47,7 +46,6 @@ export function SettingsModal({
       const payload: Parameters<typeof api.updateSettings>[0] = {
         github_username: username,
         default_org_url: orgUrl,
-        show_my_columns: showMyColumns,
       };
       // Only send the token when the user actually typed one, so saving
       // other fields never wipes an existing token.
@@ -82,23 +80,9 @@ export function SettingsModal({
             {detected
               ? `Detected from your token — change it if that isn’t you. `
               : ""}
-            Adds “Assigned to me” and “Created by me” as the last two columns on every board.
+            Fills your own columns on PR boards, and your personal analytics.
           </p>
         </div>
-
-        {username && (
-          <div className="form-row">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={showMyColumns}
-                onChange={(e) => setShowMyColumns(e.target.checked)}
-                style={{ width: "auto" }}
-              />
-              Show those two columns
-            </label>
-          </div>
-        )}
 
         <div className="form-row">
           <label>Default organization URL</label>

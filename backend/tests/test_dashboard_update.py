@@ -149,16 +149,6 @@ def test_reorder_keeps_unmentioned_columns_after_the_reordered_ones(client, make
     assert [col["name"] for col in listed] == ["B", "A", "C"]
 
 
-def test_reordering_does_not_disturb_the_automatic_columns(client, make_dashboard):
-    client.put("/api/settings", json={"github_username": "octocat"})
-    dash = make_dashboard()
-    a, b = _make_columns(client, dash["id"], ["A", "B"])
-
-    client.put(f"/api/dashboards/{dash['id']}/columns/reorder", json={"column_ids": [b["id"], a["id"]]})
-    listed = client.get(f"/api/dashboards/{dash['id']}/columns").json()
-    assert [col["name"] for col in listed] == ["B", "A", "Assigned to me", "Created by me"]
-
-
 # ---- Issue type filter ----
 
 
