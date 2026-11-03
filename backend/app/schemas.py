@@ -348,6 +348,18 @@ class IssueDetailOut(BaseModel):
     sub_issues: List["SubIssueOut"] = []
 
 
+class IssueCreate(BaseModel):
+    """A new issue in the board's repo. Labels, people, milestone and type
+    must already exist there; GitHub rejects anything else."""
+
+    title: str
+    body: Optional[str] = None
+    labels: List[str] = []
+    assignees: List[str] = []
+    milestone: Optional[int] = None
+    issue_type: Optional[str] = None
+
+
 class CommentCreate(BaseModel):
     body: str
 

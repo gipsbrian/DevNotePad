@@ -278,6 +278,11 @@ class GitHubClient:
         self._raise_for_status(resp)
         return resp.json()
 
+    async def create_issue(self, owner: str, repo: str, fields: dict) -> dict:
+        resp = await self._client.post(f"/repos/{owner}/{repo}/issues", json=fields)
+        self._raise_for_status(resp)
+        return resp.json()
+
     async def close_issue(self, owner: str, repo: str, number: int) -> dict:
         resp = await self._client.patch(
             f"/repos/{owner}/{repo}/issues/{number}", json={"state": "closed"}

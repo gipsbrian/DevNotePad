@@ -252,6 +252,15 @@ instead of one repo's issues. Make one from **New dashboard** by choosing
   and the closed section use GitHub search, which allows 30 requests a
   minute per token; each load of a PR board makes four.
 
+## New issues
+
+**New issue** on an issue board opens an issue on GitHub in the board's
+repo. Only the title is required; labels, assignees, the milestone and the
+issue type come from what the repo already has. It's made with your own
+token, so GitHub shows you as its author, and it opens on the board once
+created. On a board shared with you to view, or an organisation board
+without your own token in settings, the button is greyed out and says why.
+
 ## Working with cards
 
 - **Card face**: title, a stripped-markdown summary, full labels, opened

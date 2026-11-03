@@ -227,6 +227,10 @@ export const api = {
   /** `days` bounds the window; 0 means all time. */
   listClosedIssues: (dashboardId: string, days: number) =>
     request<IssueCard[]>(`/api/dashboards/${dashboardId}/closed?days=${days}`),
+  createIssue: (
+    dashboardId: string,
+    payload: { title: string; body?: string; labels: string[]; assignees: string[]; milestone?: number; issue_type?: string }
+  ) => request<IssueCard>(`/api/dashboards/${dashboardId}/issues`, { method: "POST", body: JSON.stringify(payload) }),
   getIssueDetail: (dashboardId: string, number: number) =>
     request<IssueDetail>(`/api/dashboards/${dashboardId}/issues/${number}`),
   listIssueComments: (dashboardId: string, number: number) =>

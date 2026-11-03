@@ -201,8 +201,8 @@ or individually: `make test-backend` / `make test-frontend`.
 - PR boards: your open pull requests and review requests across a GitHub
   org, per viewer, plus tracking columns for the PRs you follow.
 - Move an issue between compatible filter columns from its card's menu.
-- Close an issue, comment on it, or read its comments without leaving the
-  board.
+- Open a new issue in the board's repo, or close one, comment on it, or
+  read its comments, without leaving the board.
 - Private notes per issue, pushed to GitHub as a comment only when you ask.
 - A sticky-note pad per board, searchable, with checklists and dictation.
 - Closed issues grouped by day, and search across loaded cards.
