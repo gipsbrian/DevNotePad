@@ -11,7 +11,6 @@ export interface User {
 export interface Settings {
   github_username: string | null;
   default_org_url: string | null;
-  show_my_columns: boolean;
   has_default_token: boolean;
   default_token_source: "settings" | "env" | "none";
 }

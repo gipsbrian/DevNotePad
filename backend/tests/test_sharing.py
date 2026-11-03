@@ -289,7 +289,8 @@ def test_the_me_columns_follow_the_viewer(team):
     other_row, other = team["other"]
     mate.put("/api/settings", json={"github_username": "mate-gh"})
     other.put("/api/settings", json={"github_username": "other-gh"})
-    board = personal(mate)
+    # Only PR boards have them.
+    board = personal(mate, subject="pulls", org_ref="acme")
     mate.put(f"/api/dashboards/{board['id']}/sharing", json={"user_ids": [other_row.id]})
     virtual = [c for c in other.get(f"/api/dashboards/{board['id']}/columns").json() if c["virtual"]]
     assert {c["assignee"] or c["creator"] for c in virtual} == {"other-gh"}

@@ -18,7 +18,6 @@ vi.mock("../api/client", () => ({
 const settings = (overrides: Partial<Settings> = {}): Settings => ({
   github_username: null,
   default_org_url: "https://github.com/acme",
-  show_my_columns: true,
   has_default_token: true,
   default_token_source: "settings",
   ...overrides,

@@ -8,6 +8,13 @@ and this project uses [Semantic Versioning](https://semver.org/) — see the
 
 ## [Unreleased]
 
+### Removed
+
+- **"Assigned to me" and "Created by me" on issue boards.** The two
+  automatic columns, and the setting that hid them, are gone; a filter
+  column on assignee or author does the same job where it's wanted. The
+  GitHub username still fills a PR board's own columns.
+
 ### Added
 
 - **Merged and closed PRs.** A PR board now has a section below its

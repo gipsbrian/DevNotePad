@@ -61,10 +61,7 @@ def _drag_compatible(column: Column) -> bool:
 
 
 # Virtual column ids. Negative so they can never collide with a real
-# (autoincrement) column row.
-VIRTUAL_ASSIGNED_ID = -1
-VIRTUAL_CREATED_ID = -2
-# PR boards: "My open PRs" / "Review requested".
+# (autoincrement) column row. PR boards: "My open PRs" / "Review requested".
 VIRTUAL_MY_PULLS_ID = -3
 VIRTUAL_REVIEW_ID = -4
 
@@ -112,57 +109,21 @@ def _column_out(c: Column, dashboard_uuid: str) -> ColumnOut:
 
 
 def _virtual_columns(session: Session, dashboard: Dashboard, user: User, start_position: int) -> list[ColumnOut]:
-    """"Assigned to me" / "Created by me", appended to every board.
+    """A PR board's "My open PRs" / "Review requested", after its own columns.
 
     Synthesized from the viewer's own saved username rather than stored, so
     on a shared board each person sees their own, they stay in sync when
-    the username changes, always sit last, and can't be edited or deleted."""
-    app_settings = get_settings(session, user.id)
-    username = app_settings.github_username
-    dashboard_uuid = dashboard.uuid
-    if dashboard.subject == "pulls":
-        # They're what a PR board is for, so the "my columns" setting
-        # doesn't hide them. Without a username they can't be built.
-        if not username:
-            return []
-        return [
-            ColumnOut(id=VIRTUAL_MY_PULLS_ID, dashboard_id=dashboard_uuid, name="My open PRs", position=start_position,
-                      state="open", labels=[], milestone=None, assignee=None, creator=username, virtual=True, drag_compatible=False),
-            ColumnOut(id=VIRTUAL_REVIEW_ID, dashboard_id=dashboard_uuid, name="Review requested",
-                      position=start_position + 1, state="open", labels=[], milestone=None, assignee=username, virtual=True, drag_compatible=False),
-        ]
-    if not username or not app_settings.show_my_columns:
+    the username changes, and can't be edited or deleted. Issue boards have
+    none."""
+    username = get_settings(session, user.id).github_username
+    if dashboard.subject != "pulls" or not username:
         return []
-
+    dashboard_uuid = dashboard.uuid
     return [
-        ColumnOut(
-            id=VIRTUAL_ASSIGNED_ID,
-            dashboard_id=dashboard_uuid,
-            name="Assigned to me",
-            position=start_position,
-            state="open",
-            labels=[],
-            milestone=None,
-            assignee=username,
-            creator=None,
-            issue_type=None,
-            virtual=True,
-            drag_compatible=False,
-        ),
-        ColumnOut(
-            id=VIRTUAL_CREATED_ID,
-            dashboard_id=dashboard_uuid,
-            name="Created by me",
-            position=start_position + 1,
-            state="open",
-            labels=[],
-            milestone=None,
-            assignee=None,
-            creator=username,
-            issue_type=None,
-            virtual=True,
-            drag_compatible=False,
-        ),
+        ColumnOut(id=VIRTUAL_MY_PULLS_ID, dashboard_id=dashboard_uuid, name="My open PRs", position=start_position,
+                  state="open", labels=[], milestone=None, assignee=None, creator=username, virtual=True, drag_compatible=False),
+        ColumnOut(id=VIRTUAL_REVIEW_ID, dashboard_id=dashboard_uuid, name="Review requested",
+                  position=start_position + 1, state="open", labels=[], milestone=None, assignee=username, virtual=True, drag_compatible=False),
     ]
 
 
@@ -173,13 +134,8 @@ def _get_column_or_404(session: Session, dashboard_pk: int, column_id: int) -> C
     return column
 
 
-def _column_spec(session: Session, dashboard: Dashboard, user: User, column_id: int) -> ColumnOut:
-    """The filter to query GitHub with, for a real *or* virtual column."""
-    if column_id < 0:
-        for virtual in _virtual_columns(session, dashboard, user, start_position=0):
-            if virtual.id == column_id:
-                return virtual
-        raise HTTPException(404, "Set a GitHub username in settings to use this column.")
+def _column_spec(session: Session, dashboard: Dashboard, column_id: int) -> ColumnOut:
+    """The filter to query GitHub with for one of the board's columns."""
     return _column_out(_get_column_or_404(session, dashboard.id, column_id), dashboard.uuid)
 
 
@@ -710,7 +666,7 @@ async def list_column_issues(
     dashboard_uuid: str, column_id: int, session: Session = Depends(get_session), user: User = Depends(require_user)
 ):
     dashboard = get_board(session, dashboard_uuid, user, VIEW)
-    spec = _column_spec(session, dashboard, user, column_id)
+    spec = _column_spec(session, dashboard, column_id)
     if spec.kind == "tracking":
         issues = await _tracked_issues(session, dashboard, _get_column_or_404(session, dashboard.id, column_id))
         noted = {

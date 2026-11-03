@@ -221,8 +221,8 @@ export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedT
     if (next.size !== justClosed.size) setJustClosed(next);
   }, [issuesByColumn, justClosed]);
 
-  // The automatic "Assigned to me" / "Created by me" columns come from
-  // global settings, so reload when those change.
+  // The board reads GitHub with the general token from settings, so reload
+  // when those change.
   useEffect(() => {
     window.addEventListener("devnotepad:settings-changed", loadAll);
     return () => window.removeEventListener("devnotepad:settings-changed", loadAll);
@@ -408,8 +408,7 @@ export function DashboardBoardPage({ switchedTo: arrivedIn = null }: { switchedT
         refreshColumnIssues(updated.id);
       } else {
         const column = await api.createColumn(dashboardId, payload);
-        // Keep the automatic "…me" columns last.
-        setColumns((prev) => [...prev.filter((c) => !c.virtual), column, ...prev.filter((c) => c.virtual)]);
+        setColumns((prev) => [...prev, column]);
         refreshColumnIssues(column.id);
       }
       setShowColumnEditor(false);

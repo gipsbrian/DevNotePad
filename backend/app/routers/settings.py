@@ -17,7 +17,6 @@ def _out(session: Session, user: User) -> SettingsOut:
     return SettingsOut(
         github_username=row.github_username,
         default_org_url=general_org_url(session, user.id),
-        show_my_columns=row.show_my_columns,
         has_default_token=bool(general_token(session, user.id)),
         default_token_source=token_source(session, user.id),
     )
@@ -53,8 +52,6 @@ def update_settings(payload: SettingsUpdate, session: Session = Depends(get_sess
     if payload.default_token is not None:
         # An empty string clears the saved token and falls back to .env.
         row.default_token = payload.default_token.strip() or None
-    if payload.show_my_columns is not None:
-        row.show_my_columns = payload.show_my_columns
 
     session.add(row)
     session.commit()

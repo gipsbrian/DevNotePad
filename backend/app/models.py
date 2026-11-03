@@ -234,13 +234,15 @@ class AppSettings(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True, unique=True)
-    # Drives the automatic "Assigned to me" / "Created by me" columns.
+    # Drives a PR board's automatic columns and the personal analytics.
     github_username: Optional[str] = None
     # General token/org used by any board that doesn't override them.
     # For the instance owner only, falls back to GIT_TOKEN / GIT_ORG_URL
     # from .env when unset.
     default_token: Optional[str] = Field(default=None, sa_column=SAColumn(EncryptedToken))
     default_org_url: Optional[str] = None
+    # No longer read: it toggled issue boards' former "...me" columns. Kept
+    # because existing databases hold it as a NOT NULL column.
     show_my_columns: bool = True
 
 

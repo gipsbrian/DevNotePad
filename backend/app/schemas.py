@@ -67,7 +67,6 @@ class InsightsOut(BaseModel):
 class SettingsOut(BaseModel):
     github_username: Optional[str] = None
     default_org_url: Optional[str] = None
-    show_my_columns: bool = True
     # Never returns the token itself — only whether one is available and
     # where it came from.
     has_default_token: bool = False
@@ -78,7 +77,6 @@ class SettingsUpdate(BaseModel):
     github_username: Optional[str] = None
     default_org_url: Optional[str] = None
     default_token: Optional[str] = None
-    show_my_columns: Optional[bool] = None
 
 
 # ---- Dashboards ----
@@ -239,9 +237,9 @@ class ColumnOut(BaseModel):
     assignee: Optional[str]
     creator: Optional[str] = None
     issue_type: Optional[str] = None
-    # Virtual columns ("Assigned to me" / "Created by me") are synthesized
-    # from the saved username rather than stored, so they can't be edited
-    # or deleted and always sit last.
+    # Virtual columns (a PR board's "My open PRs" / "Review requested") are
+    # synthesized from the saved username rather than stored, so they can't
+    # be edited or deleted.
     virtual: bool = False
     kind: str = "filter"
     # Whether dragging/moving into this column maps to one unambiguous

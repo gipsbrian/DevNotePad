@@ -96,7 +96,6 @@ export const api = {
     github_username?: string;
     default_org_url?: string;
     default_token?: string;
-    show_my_columns?: boolean;
   }) => request<Settings>("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),
 
   getInsights: (scope: "me" | "org", username?: string) =>

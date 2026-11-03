@@ -130,10 +130,10 @@ you — if a filter you want doesn't exist yet, create it in GitHub first.
 
 Open settings from the person icon in the left rail:
 
-- **Your GitHub username** — adds **Assigned to me** and **Created by me**
-  as the last two columns on every board. It's detected from your token,
-  so you normally just confirm it. Untick "Show those two columns" to
-  hide them.
+- **Your GitHub username**: fills your own columns on PR boards (your
+  open PRs, review requests, and merged and closed PRs) and your personal
+  analytics. It's detected from your token, so you normally just confirm
+  it.
 - **Default organization URL** — prefills the repo field when you create
   a board.
 - **General token** — used by any board that doesn't carry its own. For
@@ -196,8 +196,7 @@ a filter lets go of the issues it tracked.
 For a filter column, pick from the repo's *existing*
 labels, milestones, assignees, issue authors and issue types — nothing is typed freely
 except the column's own name. Edit a column's filters later with the
-**⋯** button in its header (the two automatic "…me" columns are marked
-`auto` and aren't editable). A column with:
+**⋯** button in its header. A column with:
 
 - a single label -> moving a card into it from the card's `⋯` menu
   **adds** that label (never removes labels from other columns)
