@@ -748,6 +748,20 @@ a {
   color: rgba(255, 255, 255, 0.95);
 }
 
+.username-prompt {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.username-prompt input {
+  width: 180px;
+}
+
+.username-prompt-error {
+  flex-basis: 100%;
+}
+
 .board-canvas .notice svg,
 .board-canvas .notice-dismiss svg {
   color: rgba(255, 255, 255, 0.9);

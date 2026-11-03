@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
@@ -305,12 +305,7 @@ export function PullBoardPage({ initial, switchedTo: arrivedIn = null }: { initi
             </div>
           )}
 
-          {settings && !settings.github_username && (
-            <div className="notice" role="status">
-              <IconAlert />
-              <span>Set your GitHub username in settings to see your open PRs and the ones waiting on your review.</span>
-            </div>
-          )}
+          {settings && !settings.github_username && <UsernamePrompt onSaved={loadAll} />}
 
           {!canManage && (
             <div className="notice view-only" role="status">
@@ -562,6 +557,58 @@ function AddTrackingColumn({ onAdd }: { onAdd: (name: string) => void }) {
           Cancel
         </button>
       </div>
+    </form>
+  );
+}
+
+/** Shown only while the viewer has no GitHub username: the board's
+ * automatic columns and closed section are built from it, so ask right
+ * here, offering the general token's own account. */
+export function UsernamePrompt({ onSaved }: { onSaved: () => void }) {
+  const [username, setUsername] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { reloadSettings } = useOutletContext<{ reloadSettings?: () => void }>() ?? {};
+
+  useEffect(() => {
+    api
+      .detectUsername()
+      .then(({ login }) => login && setUsername((current) => current || login))
+      .catch(() => {});
+  }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.updateSettings({ github_username: username.trim() });
+      reloadSettings?.();
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="notice username-prompt" onSubmit={save}>
+      <IconAlert />
+      <label htmlFor="board-github-username">Your GitHub username shows your open PRs and review requests here:</label>
+      <input
+        id="board-github-username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        required
+        pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,38}"
+        title="A GitHub username: letters, digits and hyphens"
+        placeholder="octocat"
+        autoComplete="off"
+      />
+      <button className="btn primary" type="submit" disabled={saving}>
+        {saving ? "Saving…" : "Save"}
+      </button>
+      {error && <span className="username-prompt-error">{error}</span>}
     </form>
   );
 }

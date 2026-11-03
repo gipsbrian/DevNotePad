@@ -236,8 +236,9 @@ instead of one repo's issues. Make one from **New dashboard** by choosing
 - **My open PRs** and **Review requested** are automatic columns. Each
   person sees their own, built from the GitHub username in their settings,
   so on a shared or organisation board everyone sees what's on their plate.
-  If yours isn't set, the new-board form asks for it (prefilled from your
-  general token when it can be) and saves it to your settings.
+  If yours isn't set, the new-board form and the board itself ask for it
+  (prefilled from your general token when it can be). It's saved to your
+  account settings, so it applies to every board and isn't asked again.
 - **Your own columns are tracking columns.** Drag a PR into one to keep an
   eye on it, or use its card's `...` menu, exactly as on an issue board.
   Merged, closed and deleted PRs drop out by themselves.
